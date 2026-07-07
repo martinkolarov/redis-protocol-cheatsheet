@@ -342,51 +342,52 @@ type ReplyInspectorSet = {
 
 const simpleReply = (shape: string, _summary: string, protocol: "RESP2" | "RESP3"): ReplyInspector => {
   const stringType = protocol === "RESP2" ? "bulk string" : "blob string";
-  const wire = shape.includes("int")
-    ? ":1\\r\\n"
-    : shape.includes("null") && protocol === "RESP3"
+  const trimmedShape = shape.trim();
+  const isMap = trimmedShape.startsWith("Map<") || trimmedShape === "Map";
+  const isSet = trimmedShape.startsWith("Set<") || trimmedShape === "Set";
+  const isArray = trimmedShape.startsWith("[") || trimmedShape.includes(" | [");
+  const isNull = trimmedShape === "null" || trimmedShape.startsWith("null");
+  const isInt = trimmedShape.startsWith("int<");
+  const isBlob = trimmedShape.startsWith("blob<");
+  const isBulk = trimmedShape.startsWith("bulk<");
+  const simplePayload = trimmedShape.match(/simple<([^>]+)>/)?.[1] || "OK";
+  const wire = isMap
+    ? "%1\\r\\n+field\\r\\n$5\\r\\nvalue\\r\\n"
+    : isSet
+      ? "~2\\r\\n$3\\r\\none\\r\\n$3\\r\\ntwo\\r\\n"
+      : isArray
+        ? "*2\\r\\n$3\\r\\none\\r\\n$3\\r\\ntwo\\r\\n"
+        : isInt
+          ? ":1\\r\\n"
+          : isNull && protocol === "RESP3"
       ? "_\\r\\n"
-      : shape.includes("null")
+      : isNull
         ? "$-1\\r\\n"
-        : shape.includes("Map")
-          ? "%1\\r\\n+field\\r\\n$5\\r\\nvalue\\r\\n"
-          : shape.includes("Set")
-            ? "~2\\r\\n$3\\r\\none\\r\\n$3\\r\\ntwo\\r\\n"
-            : shape.includes("[")
-              ? "*2\\r\\n$3\\r\\none\\r\\n$3\\r\\ntwo\\r\\n"
-              : shape.includes("bulk") || shape.includes("blob")
+              : isBulk || isBlob
                 ? "$5\\r\\nvalue\\r\\n"
-                : "+OK\\r\\n";
+                : `+${simplePayload}\\r\\n`;
 
-  const decoded = shape.includes("int")
-    ? "1"
-    : shape.includes("null")
+  const decoded = isMap
+    ? '{ "field": "value" }'
+    : isSet
+      ? 'Set { "one", "two" }'
+      : isArray
+        ? '["one", "two"]'
+        : isInt
+          ? "1"
+          : isNull
       ? "null"
-      : shape.includes("Map")
-        ? '{ "field": "value" }'
-        : shape.includes("Set")
-          ? 'Set { "one", "two" }'
-          : shape.includes("[")
-            ? '["one", "two"]'
-            : shape.includes("bulk") || shape.includes("blob")
+            : isBulk || isBlob
               ? '"value"'
-              : '"OK"';
+              : JSON.stringify(simplePayload);
 
-  const tree = shape.includes("int")
-    ? "integer\n└─ value: 1"
-    : shape.includes("null")
-      ? "null"
-      : shape.includes("Map")
+  const tree = isMap
       ? `map\n└─ field: ${stringType}\n   └─ value: ${stringType}`
-        : shape.includes("Set")
-          ? `set\n└─ member*: ${stringType}`
-          : shape.includes("[")
-            ? `array\n└─ element*: ${stringType}`
-            : shape.includes("bulk")
-              ? "bulk string\n└─ bytes: value"
-              : shape.includes("blob")
-                ? "blob string\n└─ bytes: value"
-                : "simple string\n└─ value: OK";
+      : isSet
+        ? `set\n└─ member*: ${stringType}`
+        : isArray
+          ? `array\n└─ element*: ${stringType}`
+          : trimmedShape;
 
   return {
     tree,
