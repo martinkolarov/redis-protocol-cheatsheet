@@ -1047,6 +1047,14 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
       function inferBadge(text, fallback = "node") {
         const lower = text.toLowerCase();
+        const compactTypes = text.match(/\b(simple|bulk|blob|int|double|null|error|array|map|set|push)[<-]/gi) || [];
+        if (text.includes(" | ") && compactTypes.length > 1) return "reply";
+        if (/^simple</i.test(text)) return "simple";
+        if (/^bulk</i.test(text)) return "bulk";
+        if (/^blob</i.test(text)) return "blob";
+        if (/^int</i.test(text) || /^integer</i.test(text)) return "int";
+        if (/^double</i.test(text)) return "double";
+        if (/^error\b/i.test(text)) return "error";
         if (lower.includes("null")) return "null";
         if (lower.includes("array") || text.includes("[") || text.includes("*")) return "array";
         if (lower.includes("map") || text.includes("{") || text.includes("%")) return "map";
