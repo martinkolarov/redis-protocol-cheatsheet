@@ -1050,7 +1050,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         if (lower.includes("null")) return "null";
         if (lower.includes("array") || text.includes("[") || text.includes("*")) return "array";
         if (lower.includes("map") || text.includes("{") || text.includes("%")) return "map";
-        if (lower.includes("push") || text.includes(">")) return "push";
+        if (lower.includes("push")) return "push";
         if (lower.includes("bulk")) return "bulk";
         if (lower.includes("blob")) return "blob";
         if (lower.includes("simple")) return "simple";
