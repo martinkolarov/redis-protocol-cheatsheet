@@ -1400,7 +1400,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         if (rawMode) {
           const pre = document.createElement("pre");
           pre.className = "inspector-raw";
-          pre.textContent = scenario.text;
+          pre.textContent = scenario.text.replace(/\\r\\n/g, "\\r\\n\n").trimEnd();
           output.append(pre);
           return;
         }
