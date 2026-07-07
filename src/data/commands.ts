@@ -24,8 +24,8 @@ export const commands: Command[] = [
   {
     name: "HELLO",
     category: "Connection / Server",
-    signature: "HELLO protover [AUTH username password] [SETNAME clientname]",
-    params: ["protover: 2 or 3.", "AUTH: authenticate during handshake.", "SETNAME: assign client name."],
+    signature: "HELLO [protover [AUTH username password] [SETNAME clientname]]",
+    params: ["protover: optional 2 or 3.", "AUTH: authenticate during handshake.", "SETNAME: assign client name."],
     resp2: "Array of alternating bulk-string field names and RESP values.",
     resp3: "Map with server, version, proto, id, mode, role, and module metadata.",
     notes: ["Switches the connection protocol version. Invalid protover is an error.", "RESP3 clients should be ready for push messages outside direct request/reply flow."],
@@ -55,7 +55,7 @@ export const commands: Command[] = [
     signature: "CLIENT subcommand [arg ...]",
     params: ["subcommand: SETNAME, GETNAME, ID, INFO, LIST, KILL, PAUSE, REPLY, TRACKING, etc."],
     resp2: "Depends on subcommand: simple string, integer, bulk string, or array.",
-    resp3: "Depends on subcommand; some structured replies may be maps or push-related behavior.",
+    resp3: "Depends on subcommand: simple string, integer, blob string, array, map, push, or suppressed reply behavior.",
     notes: ["CLIENT REPLY can suppress replies; client implementations must not assume every command yields a response after it is changed."],
     tags: ["connection", "admin", "push"]
   },
@@ -83,9 +83,9 @@ export const commands: Command[] = [
     signature: "COMMAND [subcommand [arg ...]]",
     params: ["subcommand: optional DOCS, INFO, COUNT, GETKEYS, GETKEYSANDFLAGS, LIST."],
     resp2: "Nested arrays containing bulk strings, integers, and sub-arrays for arity, flags, key specs, and metadata.",
-    resp3: "Nested maps/arrays containing strings, integers, and sub-aggregates for richer command metadata where applicable.",
+    resp3: "Nested arrays containing blob strings, integers, and sub-aggregates for arity, flags, key specs, and metadata.",
     notes: ["Use for capability discovery instead of hard-coding server command tables."],
-    tags: ["server", "array", "map", "metadata"]
+    tags: ["server", "array", "metadata"]
   },
   {
     name: "EXISTS",
@@ -478,7 +478,7 @@ export const commands: Command[] = [
     signature: "ZADD key [NX | XX] [GT | LT] [CH] [INCR] score member [score member ...]",
     params: ["score member: one or more pairs.", "CH: count changed members.", "INCR: increment score of a single member."],
     resp2: "Integer added count, bulk string new score with INCR, or null bulk when INCR is skipped by NX/XX/GT/LT.",
-    resp3: "Integer added count, double/blob new score with INCR, or null when INCR is skipped by NX/XX/GT/LT.",
+    resp3: "Integer added count, double new score with INCR, or null when INCR is skipped by NX/XX/GT/LT.",
     notes: ["Scores parse as doubles. NaN is rejected. INCR accepts only one pair. With INCR, a failed condition returns null instead of an integer count."],
     tags: ["zset", "integer", "double"]
   },
@@ -507,7 +507,7 @@ export const commands: Command[] = [
     signature: "ZSCORE key member",
     params: ["member: sorted-set member."],
     resp2: "Bulk string score, or null bulk string when missing.",
-    resp3: "Double or blob string score depending on server version, or null when missing.",
+    resp3: "Double score, or null when missing.",
     notes: ["Clients should preserve exact text if they do not want floating-point round-trip changes."],
     tags: ["zset", "double", "nil"]
   },
@@ -517,7 +517,7 @@ export const commands: Command[] = [
     signature: "ZRANK key member [WITHSCORE]",
     params: ["WITHSCORE: optionally include score."],
     resp2: "Integer rank, null bulk string when missing; with WITHSCORE: two-element array [integer rank, bulk string score].",
-    resp3: "Integer rank or null; with WITHSCORE: two-element array [integer rank, blob string or double score].",
+    resp3: "Integer rank or null; with WITHSCORE: two-element array [integer rank, double score].",
     notes: ["Rank is zero-based and ascending by score."],
     tags: ["zset", "integer", "nil", "array"]
   },

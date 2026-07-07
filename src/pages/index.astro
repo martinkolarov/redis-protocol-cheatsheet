@@ -39,7 +39,7 @@ const typedReplies: Record<string, { resp2: string; resp3: string }> = {
   },
   COMMAND: {
     resp2: "[[bulk name, int arity, [bulk flag, ...], ...], ...]",
-    resp3: "Map | [[string name, int arity, [string flag, ...], ...], ...]"
+    resp3: "[[blob name, int arity, [blob flag, ...], ...], ...]"
   },
   EXISTS: {
     resp2: "int<count>",
@@ -207,7 +207,7 @@ const typedReplies: Record<string, { resp2: string; resp3: string }> = {
   },
   ZADD: {
     resp2: "int<added-or-changed>\n[INCR]: bulk<new-score> | null-bulk<condition-miss>",
-    resp3: "int<added-or-changed>\n[INCR]: double<new-score> | blob<new-score> | null<condition-miss>"
+    resp3: "int<added-or-changed>\n[INCR]: double<new-score> | null<condition-miss>"
   },
   ZRANGE: {
     resp2: "[bulk member, ...]\n[WITHSCORES]: [bulk member, bulk score, ...]",
@@ -219,11 +219,11 @@ const typedReplies: Record<string, { resp2: string; resp3: string }> = {
   },
   ZSCORE: {
     resp2: "bulk<score> | null-bulk",
-    resp3: "double<score> | blob<score> | null"
+    resp3: "double<score> | null"
   },
   ZRANK: {
     resp2: "int<rank> | null-bulk\n[WITHSCORE]: [int rank, bulk score]",
-    resp3: "int<rank> | null\n[WITHSCORE]: [int rank, double score | blob score]"
+    resp3: "int<rank> | null\n[WITHSCORE]: [int rank, double score]"
   },
   ZCARD: {
     resp2: "int<cardinality>",
@@ -341,6 +341,7 @@ type ReplyInspectorSet = {
 };
 
 const simpleReply = (shape: string, _summary: string, protocol: "RESP2" | "RESP3"): ReplyInspector => {
+  const stringType = protocol === "RESP2" ? "bulk string" : "blob string";
   const wire = shape.includes("int")
     ? ":1\\r\\n"
     : shape.includes("null") && protocol === "RESP3"
@@ -376,11 +377,11 @@ const simpleReply = (shape: string, _summary: string, protocol: "RESP2" | "RESP3
     : shape.includes("null")
       ? "null"
       : shape.includes("Map")
-        ? "map\n└─ field: string\n   └─ value: string"
+      ? `map\n└─ field: ${stringType}\n   └─ value: ${stringType}`
         : shape.includes("Set")
-          ? "set\n└─ member*: string"
+          ? `set\n└─ member*: ${stringType}`
           : shape.includes("[")
-            ? "array\n└─ element*: string"
+            ? `array\n└─ element*: ${stringType}`
             : shape.includes("bulk")
               ? "bulk string\n└─ bytes: value"
               : shape.includes("blob")
@@ -498,7 +499,7 @@ const replyInspectors: Record<string, ReplyInspectorSet> = {
       decoded: '{\n  "changed": 1,\n  "incrementedScore": "10.5",\n  "conditionMiss": null\n}'
     },
     resp3: {
-      tree: "integer | double/blob string | null\n├─ normal add/update: integer count\n├─ INCR success: new score as double or blob string\n└─ INCR with failed NX/XX/GT/LT condition: null, score unchanged",
+      tree: "integer | double | null\n├─ normal add/update: integer count\n├─ INCR success: new score as double\n└─ INCR with failed NX/XX/GT/LT condition: null, score unchanged",
       wire: ":1\\r\\n\n# INCR success\n,10.5\\r\\n\n# INCR condition miss\n_\\r\\n",
       decoded: '{\n  "changed": 1,\n  "incrementedScore": 10.5,\n  "conditionMiss": null\n}'
     }
@@ -972,7 +973,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                           <div class="reply-panel">
                             <pre class="reply-code" data-resp2-shape={resp2Shape} data-resp3-shape={resp3Shape}>{resp2Shape}</pre>
                             <p class="reply-summary" data-resp2-note={command.resp2} data-resp3-note={command.resp3}>{command.resp2}</p>
-                            <div class="reply-inspector" data-reply-inspector>
+                            <div class="reply-inspector" data-reply-inspector data-command-name={command.name}>
                               <div class="inspector-tabs" role="tablist" aria-label={`${command.name} reply views`}>
                                 <button class="active" type="button" data-inspector-tab="tree">Tree</button>
                                 <button type="button" data-inspector-tab="wire">Wire</button>
@@ -1298,44 +1299,84 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         }
       }
 
-      function renderValueNode(value, label = "") {
-        if (Array.isArray(value)) {
-          return renderNestedNode({
-            label: label ? `${label}: array(${value.length})` : `array(${value.length})`,
-            type: "array",
-            open: true,
-            children: value.map((item, index) => ({ label: `[${index}]`, type: inferBadge(String(item)), children: [valueNodeShape(item)] }))
-          });
+      function scalarTypesFromWire(raw, mode) {
+        const lines = raw
+          .split("\\r\\n")
+          .flatMap((line) => line.split("\n"))
+          .map((line) => line.trim())
+          .filter(Boolean);
+        const types = [];
+
+        for (let index = 0; index < lines.length; index += 1) {
+          const line = lines[index];
+          const prefix = line[0] || "";
+          if (prefix === "$") {
+            types.push(mode === "resp2" ? "bulk" : "blob");
+            index += 1;
+          } else if (prefix === "+") {
+            types.push("simple");
+          } else if (prefix === ":") {
+            types.push("int");
+          } else if (prefix === ",") {
+            types.push("double");
+          } else if (prefix === "_") {
+            types.push("null");
+          } else if (prefix === "#") {
+            types.push("bool");
+          } else if (prefix === "-") {
+            types.push("error");
+          }
         }
 
-        if (value && typeof value === "object") {
-          return renderNestedNode({
-            label: label ? `${label}: object` : "object",
-            type: "map",
-            open: true,
-            children: Object.entries(value).map(([key, item]) => ({ label: key, type: inferBadge(String(item)), children: [valueNodeShape(item)] }))
-          });
-        }
-
-        return renderNestedNode(valueNodeShape(value, label));
+        return {
+          next(fallback) {
+            return types.shift() || fallback;
+          }
+        };
       }
 
-      function valueNodeShape(value, label = "") {
+      function renderValueNode(value, label = "", typeHints = null) {
+        if (Array.isArray(value)) {
+          return renderNestedNode({
+            label: label ? `${label}: array(${value.length})` : `array(${value.length})`,
+            type: "array",
+            open: true,
+            children: value.map((item, index) => valueNodeShape(item, `[${index}]`, typeHints))
+          });
+        }
+
+        if (value && typeof value === "object") {
+          return renderNestedNode({
+            label: label ? `${label}: object` : "object",
+            type: "map",
+            open: true,
+            children: Object.entries(value).map(([key, item]) => valueNodeShape(item, key, typeHints, true))
+          });
+        }
+
+        return renderNestedNode(valueNodeShape(value, label, typeHints));
+      }
+
+      function valueNodeShape(value, label = "", typeHints = null, consumeMapKey = false) {
+        const keyType = consumeMapKey ? typeHints?.next("string") : null;
         if (Array.isArray(value)) {
           return {
             label: label ? `${label}: array(${value.length})` : `array(${value.length})`,
-            type: "array",
-            children: value.map((item, index) => valueNodeShape(item, `[${index}]`))
+            type: keyType || "array",
+            children: value.map((item, index) => valueNodeShape(item, `[${index}]`, typeHints))
           };
         }
         if (value && typeof value === "object") {
           return {
             label: label ? `${label}: object` : "object",
-            type: "map",
-            children: Object.entries(value).map(([key, item]) => valueNodeShape(item, key))
+            type: keyType || "map",
+            children: Object.entries(value).map(([key, item]) => valueNodeShape(item, key, typeHints, true))
           };
         }
-        return { label: label ? `${label}: ${value === null ? "null" : JSON.stringify(value)}` : value === null ? "null" : JSON.stringify(value), type: value === null ? "null" : typeof value };
+        return {
+          label: label ? `${label}: ${value === null ? "null" : JSON.stringify(value)}` : value === null ? "null" : JSON.stringify(value),
+          type: value === null ? "null" : typeHints?.next(typeof value) || typeof value
+        };
       }
 
       function getInspectorPayload(output) {
@@ -1388,9 +1429,9 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         picker.hidden = outcomes.length <= 1;
       }
 
-      function renderTreeView(output, text, outcome, valueScenario, hasMultipleOutcomes) {
+      function renderTreeView(output, text, outcome, valueScenario, wireScenario, hasMultipleOutcomes) {
         if (outcome && valueScenario && hasMultipleOutcomes) {
-          output.append(renderNestedNode(valueNodeShape(valueScenario.value)));
+          output.append(renderNestedNode(valueNodeShape(valueScenario.value, "", scalarTypesFromWire(wireScenario?.text || "", currentMode))));
           return;
         }
         output.append(renderNestedNode(parseTreeLines(text)));
@@ -1423,7 +1464,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         clearNode(output);
         inspector.querySelector("[data-raw-toggle]").hidden = view !== "wire";
 
-        if (view === "tree") renderTreeView(output, payload.tree, active, activeValue, payload.outcomes.length > 1);
+        if (view === "tree") renderTreeView(output, payload.tree, active, activeValue, activeWire, payload.outcomes.length > 1);
         if (view === "wire") renderWireView(inspector, output, activeWire);
       }
 
