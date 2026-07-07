@@ -419,24 +419,24 @@ const replyInspectors: Record<string, ReplyInspectorSet> = {
     resp2: {
       tree: "array | null array\n├─ key: bulk string\n└─ element: bulk string\n\non timeout\n└─ null array",
       wire: "*2\\r\\n$5\\r\\nqueue\\r\\n$3\\r\\njob\\r\\n\n# timeout\n*-1\\r\\n",
-      decoded: '["queue", "job"]\n// timeout: null'
+      decoded: '{\n  "success": ["queue", "job"],\n  "timeout": null\n}'
     },
     resp3: {
       tree: "array | null\n├─ key: blob string\n└─ element: blob string\n\non timeout\n└─ null",
       wire: "*2\\r\\n$5\\r\\nqueue\\r\\n$3\\r\\njob\\r\\n\n# timeout\n_\\r\\n",
-      decoded: '["queue", "job"]\n// timeout: null'
+      decoded: '{\n  "success": ["queue", "job"],\n  "timeout": null\n}'
     }
   },
   BRPOP: {
     resp2: {
       tree: "array | null array\n├─ key: bulk string\n└─ element: bulk string\n\non timeout\n└─ null array",
       wire: "*2\\r\\n$5\\r\\nqueue\\r\\n$3\\r\\njob\\r\\n\n# timeout\n*-1\\r\\n",
-      decoded: '["queue", "job"]\n// timeout: null'
+      decoded: '{\n  "success": ["queue", "job"],\n  "timeout": null\n}'
     },
     resp3: {
       tree: "array | null\n├─ key: blob string\n└─ element: blob string\n\non timeout\n└─ null",
       wire: "*2\\r\\n$5\\r\\nqueue\\r\\n$3\\r\\njob\\r\\n\n# timeout\n_\\r\\n",
-      decoded: '["queue", "job"]\n// timeout: null'
+      decoded: '{\n  "success": ["queue", "job"],\n  "timeout": null\n}'
     }
   },
   ZRANGE: {
@@ -479,24 +479,24 @@ const replyInspectors: Record<string, ReplyInspectorSet> = {
     resp2: {
       tree: "array | null array\n└─ stream result*\n   ├─ stream: bulk string\n   └─ entries: array\n      └─ entry*\n         ├─ id: bulk string\n         └─ fields: array\n            ├─ field: bulk string\n            └─ value: bulk string",
       wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
-      decoded: '[["mystream", [["1700000000000-0", ["name", "alice"]]]]]\n// timeout: null'
+      decoded: '{\n  "success": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]]\n  ],\n  "timeout": null\n}'
     },
     resp3: {
       tree: "map | null\n└─ stream name: blob string\n   └─ entries: array\n      └─ entry*\n         ├─ id: blob string\n         └─ fields: map\n            └─ field blob string => value blob string",
       wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n_\\r\\n",
-      decoded: '{ "mystream": [["1700000000000-0", { "name": "alice" }]] }\n// timeout: null'
+      decoded: '{\n  "success": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]]\n  },\n  "timeout": null\n}'
     }
   },
   XREADGROUP: {
     resp2: {
       tree: "array | null array\n└─ stream result*\n   ├─ stream: bulk string\n   └─ entries: array\n      └─ entry*\n         ├─ id: bulk string\n         └─ fields: array\n            ├─ field: bulk string\n            └─ value: bulk string",
       wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
-      decoded: '[["mystream", [["1700000000000-0", ["name", "alice"]]]]]\n// timeout: null'
+      decoded: '{\n  "success": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]]\n  ],\n  "timeout": null\n}'
     },
     resp3: {
       tree: "map | null\n└─ stream name: blob string\n   └─ entries: array\n      └─ entry*\n         ├─ id: blob string\n         └─ fields: map\n            └─ field blob string => value blob string",
       wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n_\\r\\n",
-      decoded: '{ "mystream": [["1700000000000-0", { "name": "alice" }]] }\n// timeout: null'
+      decoded: '{\n  "success": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]]\n  },\n  "timeout": null\n}'
     }
   },
   SUBSCRIBE: {
@@ -527,12 +527,12 @@ const replyInspectors: Record<string, ReplyInspectorSet> = {
     resp2: {
       tree: "array | null array\n├─ reply[0]: nested reply from queued command\n├─ reply[1]: nested reply from queued command\n└─ null array when WATCH aborts",
       wire: "*2\\r\\n+OK\\r\\n:2\\r\\n\n# WATCH abort\n*-1\\r\\n",
-      decoded: '["OK", 2]\n// watch abort: null'
+      decoded: '{\n  "success": ["OK", 2],\n  "watchAbort": null\n}'
     },
     resp3: {
       tree: "array | null\n├─ reply[0]: nested reply from queued command\n├─ reply[1]: nested reply from queued command\n└─ null when WATCH aborts",
       wire: "*2\\r\\n+OK\\r\\n:2\\r\\n\n# WATCH abort\n_\\r\\n",
-      decoded: '["OK", 2]\n// watch abort: null'
+      decoded: '{\n  "success": ["OK", 2],\n  "watchAbort": null\n}'
     }
   },
   "CLUSTER SLOTS": {
@@ -897,7 +897,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                               <div class="inspector-tabs" role="tablist" aria-label={`${command.name} reply views`}>
                                 <button class="active" type="button" data-inspector-tab="tree">Tree</button>
                                 <button type="button" data-inspector-tab="wire">Wire</button>
-                                <button type="button" data-inspector-tab="decoded">Decoded</button>
+                                <button type="button" data-inspector-tab="decoded">Value</button>
                               </div>
                               <pre
                                 class="inspector-output"
