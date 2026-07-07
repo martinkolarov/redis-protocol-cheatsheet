@@ -3,6 +3,8 @@ import { categories, commands, tagCloud } from "../data/commands";
 import "../styles/global.css";
 
 const categoryIds = new Map(categories.map((category) => [category, category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")]));
+const buildId = import.meta.env.PUBLIC_BUILD_ID ?? "local";
+const shortBuildId = buildId === "local" ? buildId : buildId.slice(0, 7);
 
 const typedReplies: Record<string, { resp2: string; resp3: string }> = {
   PING: {
@@ -335,6 +337,10 @@ const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) 
       name="description"
       content="A hacker-readable Redis protocol cheat sheet focused on command signatures, RESP2/RESP3 replies, and implementation edge cases."
     />
+    <meta name="build-id" content={buildId} />
+    <meta http-equiv="cache-control" content="no-cache" />
+    <meta http-equiv="pragma" content="no-cache" />
+    <meta http-equiv="expires" content="0" />
     <title>Redis Protocol Cheat Sheet</title>
   </head>
   <body>
@@ -360,6 +366,10 @@ const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) 
           <div class="status-row">
             <span>mode</span>
             <strong data-mode-label>RESP2</strong>
+          </div>
+          <div class="status-row">
+            <span>build</span>
+            <strong>{shortBuildId}</strong>
           </div>
         </aside>
       </header>
