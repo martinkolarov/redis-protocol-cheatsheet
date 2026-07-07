@@ -899,16 +899,25 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                                 <button type="button" data-inspector-tab="wire">Wire</button>
                                 <button type="button" data-inspector-tab="decoded">Value</button>
                               </div>
-                              <pre
+                              <div class="inspector-toolbar">
+                                <div class="scenario-tabs" data-scenario-tabs></div>
+                                <div class="inspector-actions">
+                                  <button type="button" data-raw-toggle>Raw</button>
+                                  <button type="button" data-expand-all>Expand</button>
+                                  <button type="button" data-collapse-all>Collapse</button>
+                                </div>
+                              </div>
+                              <div
                                 class="inspector-output"
                                 data-active-view="tree"
+                                data-active-scenario="success"
                                 data-resp2-tree={replyInspector.resp2.tree}
                                 data-resp2-wire={replyInspector.resp2.wire}
                                 data-resp2-decoded={replyInspector.resp2.decoded}
                                 data-resp3-tree={replyInspector.resp3.tree}
                                 data-resp3-wire={replyInspector.resp3.wire}
                                 data-resp3-decoded={replyInspector.resp3.decoded}
-                              >{replyInspector.resp2.tree}</pre>
+                              ></div>
                             </div>
                           </div>
                         </div>
@@ -955,9 +964,279 @@ const getErrorCases = (command: { name: string; category: string; signature: str
       let selectedTag = "all";
       let currentMode = "resp2";
 
+      function inferBadge(text, fallback = "node") {
+        const lower = text.toLowerCase();
+        if (lower.includes("null")) return "null";
+        if (lower.includes("array") || text.includes("[") || text.includes("*")) return "array";
+        if (lower.includes("map") || text.includes("{") || text.includes("%")) return "map";
+        if (lower.includes("push") || text.includes(">")) return "push";
+        if (lower.includes("bulk")) return "bulk";
+        if (lower.includes("blob")) return "blob";
+        if (lower.includes("simple")) return "simple";
+        if (lower.includes("integer") || lower.includes("int") || text.startsWith(":")) return "int";
+        if (lower.includes("error")) return "error";
+        if (lower.includes("string")) return "string";
+        return fallback;
+      }
+
+      function clearNode(node) {
+        while (node.firstChild) node.removeChild(node.firstChild);
+      }
+
+      function makeBadge(type) {
+        const badge = document.createElement("span");
+        badge.className = "inspector-badge";
+        badge.dataset.badge = type;
+        badge.textContent = type;
+        return badge;
+      }
+
+      function makeLiteral(value) {
+        const code = document.createElement("code");
+        code.className = "inspector-literal";
+        code.textContent = value;
+        return code;
+      }
+
+      function renderNestedNode(node, { type = "node", open = true } = {}) {
+        const children = node.children || [];
+        if (!children.length) {
+          const row = document.createElement("div");
+          row.className = "inspector-leaf";
+          row.append(makeBadge(node.type || type), document.createTextNode(" "), makeLiteral(node.label));
+          if (node.description) {
+            const description = document.createElement("span");
+            description.className = "inspector-description";
+            description.textContent = node.description;
+            row.append(description);
+          }
+          return row;
+        }
+
+        const details = document.createElement("details");
+        details.className = "inspector-node";
+        details.open = node.open ?? open;
+        const summary = document.createElement("summary");
+        summary.append(makeBadge(node.type || type), document.createTextNode(" "), makeLiteral(node.label));
+        if (node.description) {
+          const description = document.createElement("span");
+          description.className = "inspector-description";
+          description.textContent = node.description;
+          summary.append(description);
+        }
+        const branch = document.createElement("div");
+        branch.className = "inspector-branch";
+        children.forEach((child) => branch.append(renderNestedNode(child, { type, open: false })));
+        details.append(summary, branch);
+        return details;
+      }
+
+      function parseTreeLines(text) {
+        const root = { label: "reply", type: "reply", open: true, children: [] };
+        const stack = [{ indent: -1, node: root }];
+
+        text
+          .split("\n")
+          .filter((line) => line.trim())
+          .forEach((line, index) => {
+            const label = line.replace(/^[\s│├└─]+/, "").trim();
+            const prefix = line.match(/^[\s│├└─]*/)?.[0] || "";
+            const indent = prefix.replace(/[├└─]/g, " ").length;
+            const node = {
+              label,
+              type: index === 0 ? inferBadge(label, "reply") : inferBadge(label),
+              open: indent <= 1,
+              children: []
+            };
+
+            while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop();
+            stack[stack.length - 1].node.children.push(node);
+            stack.push({ indent, node });
+          });
+
+        return root.children.length === 1 ? root.children[0] : root;
+      }
+
+      function getWireKind(line) {
+        const prefix = line[0] || "";
+        const map = {
+          "*": "array",
+          "$": "bulk",
+          "+": "simple",
+          "-": "error",
+          ":": "int",
+          "%": "map",
+          "~": "set",
+          ">": "push",
+          "_": "null",
+          "#": "bool",
+          ",": "double"
+        };
+        return map[prefix] || "frame";
+      }
+
+      function parseWireScenario(raw) {
+        const frames = raw
+          .split("\\r\\n")
+          .flatMap((line) => line.split("\n"))
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        return frames.map((line) => ({
+          label: line,
+          type: getWireKind(line),
+          description: line.startsWith("#") ? "scenario marker" : undefined
+        }));
+      }
+
+      function splitScenarioText(text, defaultName = "success") {
+        const scenarios = [];
+        let current = { name: defaultName, text: "" };
+        const normalizeScenarioName = (name) => {
+          const lower = name.trim().toLowerCase();
+          if (lower.includes("timeout")) return "timeout";
+          if (lower.includes("watch")) return "watch abort";
+          if (lower.includes("null")) return "null";
+          return lower.replace(/\s+/g, "-");
+        };
+
+        text.split(/\n#\s*/).forEach((chunk, index) => {
+          if (index === 0) {
+            current.text = chunk.trim();
+            scenarios.push(current);
+            return;
+          }
+
+          const [nameLine, ...rest] = chunk.split("\n");
+          scenarios.push({ name: normalizeScenarioName(nameLine), text: rest.join("\n").trim() });
+        });
+
+        return scenarios.filter((scenario) => scenario.text);
+      }
+
+      function parseValueScenarios(text) {
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            const keys = Object.keys(parsed);
+            const scenarioKeys = keys.filter((key) => ["success", "timeout", "watchAbort", "empty", "nil", "null"].includes(key));
+            if (scenarioKeys.length > 1) {
+              return scenarioKeys.map((key) => ({ name: key.replace(/([A-Z])/g, " $1").toLowerCase(), value: parsed[key] }));
+            }
+          }
+          return [{ name: "value", value: parsed }];
+        } catch {
+          return [{ name: "value", value: text }];
+        }
+      }
+
+      function renderValueNode(value, label = "value") {
+        if (Array.isArray(value)) {
+          return renderNestedNode({
+            label: `${label}: array(${value.length})`,
+            type: "array",
+            open: true,
+            children: value.map((item, index) => ({ label: `[${index}]`, type: inferBadge(String(item)), children: [valueNodeShape(item)] }))
+          });
+        }
+
+        if (value && typeof value === "object") {
+          return renderNestedNode({
+            label: `${label}: object`,
+            type: "map",
+            open: true,
+            children: Object.entries(value).map(([key, item]) => ({ label: key, type: inferBadge(String(item)), children: [valueNodeShape(item)] }))
+          });
+        }
+
+        return renderNestedNode(valueNodeShape(value, label));
+      }
+
+      function valueNodeShape(value, label = "value") {
+        if (Array.isArray(value)) {
+          return {
+            label: `${label}: array(${value.length})`,
+            type: "array",
+            children: value.map((item, index) => valueNodeShape(item, `[${index}]`))
+          };
+        }
+        if (value && typeof value === "object") {
+          return {
+            label: `${label}: object`,
+            type: "map",
+            children: Object.entries(value).map(([key, item]) => valueNodeShape(item, key))
+          };
+        }
+        return { label: `${label}: ${value === null ? "null" : JSON.stringify(value)}`, type: value === null ? "null" : typeof value };
+      }
+
+      function setScenarioTabs(inspector, scenarios, activeName, onSelect) {
+        const tabs = inspector.querySelector("[data-scenario-tabs]");
+        clearNode(tabs);
+        tabs.hidden = scenarios.length <= 1;
+        scenarios.forEach((scenario) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = scenario.name;
+          button.classList.toggle("active", scenario.name === activeName);
+          button.addEventListener("click", () => onSelect(scenario.name));
+          tabs.append(button);
+        });
+      }
+
+      function renderTreeView(output, text) {
+        output.append(renderNestedNode(parseTreeLines(text)));
+      }
+
+      function renderWireView(inspector, output, text) {
+        const rawMode = inspector.dataset.rawMode === "true";
+        const scenarios = splitScenarioText(text);
+        const activeScenario = scenarios.some((scenario) => scenario.name === output.dataset.activeScenario) ? output.dataset.activeScenario : scenarios[0]?.name;
+        output.dataset.activeScenario = activeScenario || "success";
+        setScenarioTabs(inspector, scenarios, output.dataset.activeScenario, (name) => {
+          output.dataset.activeScenario = name;
+          updateInspectorOutput(output);
+        });
+
+        const scenario = scenarios.find((item) => item.name === output.dataset.activeScenario) || scenarios[0];
+        if (!scenario) return;
+
+        if (rawMode) {
+          const pre = document.createElement("pre");
+          pre.className = "inspector-raw";
+          pre.textContent = scenario.text;
+          output.append(pre);
+          return;
+        }
+
+        parseWireScenario(scenario.text).forEach((frame) => output.append(renderNestedNode(frame, { type: "frame", open: false })));
+      }
+
+      function renderValueView(inspector, output, text) {
+        const scenarios = parseValueScenarios(text);
+        const activeScenario = scenarios.some((scenario) => scenario.name === output.dataset.activeScenario) ? output.dataset.activeScenario : scenarios[0]?.name;
+        output.dataset.activeScenario = activeScenario || "value";
+        setScenarioTabs(inspector, scenarios, output.dataset.activeScenario, (name) => {
+          output.dataset.activeScenario = name;
+          updateInspectorOutput(output);
+        });
+
+        const scenario = scenarios.find((item) => item.name === output.dataset.activeScenario) || scenarios[0];
+        if (!scenario) return;
+        output.append(renderValueNode(scenario.value, scenario.name));
+      }
+
       function updateInspectorOutput(output) {
+        const inspector = output.closest("[data-reply-inspector]");
         const view = output.dataset.activeView || "tree";
-        output.textContent = output.dataset[`${currentMode}${view[0].toUpperCase()}${view.slice(1)}`] || "";
+        const text = output.dataset[`${currentMode}${view[0].toUpperCase()}${view.slice(1)}`] || "";
+        clearNode(output);
+        inspector.querySelector("[data-raw-toggle]").hidden = view !== "wire";
+        inspector.querySelector("[data-scenario-tabs]").hidden = true;
+
+        if (view === "tree") renderTreeView(output, text);
+        if (view === "wire") renderWireView(inspector, output, text);
+        if (view === "decoded") renderValueView(inspector, output, text);
       }
 
       function updateMode(mode) {
@@ -1013,13 +1292,36 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
       document.querySelectorAll("[data-reply-inspector]").forEach((inspector) => {
         const output = inspector.querySelector("[data-active-view]");
+        const rawToggle = inspector.querySelector("[data-raw-toggle]");
+        const expandAll = inspector.querySelector("[data-expand-all]");
+        const collapseAll = inspector.querySelector("[data-collapse-all]");
+
         inspector.querySelectorAll("[data-inspector-tab]").forEach((button) => {
           button.addEventListener("click", () => {
             output.dataset.activeView = button.dataset.inspectorTab;
+            output.dataset.activeScenario = button.dataset.inspectorTab === "wire" ? "success" : "value";
             inspector.querySelectorAll("[data-inspector-tab]").forEach((tab) => {
               tab.classList.toggle("active", tab === button);
             });
             updateInspectorOutput(output);
+          });
+        });
+
+        rawToggle.addEventListener("click", () => {
+          inspector.dataset.rawMode = inspector.dataset.rawMode === "true" ? "false" : "true";
+          rawToggle.classList.toggle("active", inspector.dataset.rawMode === "true");
+          updateInspectorOutput(output);
+        });
+
+        expandAll.addEventListener("click", () => {
+          output.querySelectorAll("details").forEach((details) => {
+            details.open = true;
+          });
+        });
+
+        collapseAll.addEventListener("click", () => {
+          output.querySelectorAll("details").forEach((details) => {
+            details.open = false;
           });
         });
       });
