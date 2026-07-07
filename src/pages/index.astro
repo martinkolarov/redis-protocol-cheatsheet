@@ -3,6 +3,327 @@ import { categories, commands, tagCloud } from "../data/commands";
 import "../styles/global.css";
 
 const categoryIds = new Map(categories.map((category) => [category, category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")]));
+
+const typedReplies: Record<string, { resp2: string; resp3: string }> = {
+  PING: {
+    resp2: "simple<PONG> | bulk<message>",
+    resp3: "simple<PONG> | blob<message>"
+  },
+  HELLO: {
+    resp2: "[bulk field, reply value, ...]",
+    resp3: "Map<simple field, reply value>"
+  },
+  AUTH: {
+    resp2: "simple<OK> | error",
+    resp3: "simple<OK> | error"
+  },
+  SELECT: {
+    resp2: "simple<OK>",
+    resp3: "simple<OK>"
+  },
+  CLIENT: {
+    resp2: "simple | int | bulk | [reply, ...]",
+    resp3: "simple | int | blob | Map | Push | [reply, ...]"
+  },
+  QUIT: {
+    resp2: "simple<OK> -> close",
+    resp3: "simple<OK> -> close"
+  },
+  INFO: {
+    resp2: "bulk<line-oriented text>",
+    resp3: "blob<line-oriented text>"
+  },
+  COMMAND: {
+    resp2: "[[bulk name, int arity, [bulk flag, ...], ...], ...]",
+    resp3: "Map | [[string name, int arity, [string flag, ...], ...], ...]"
+  },
+  EXISTS: {
+    resp2: "int<count>",
+    resp3: "int<count>"
+  },
+  DEL: {
+    resp2: "int<removed>",
+    resp3: "int<removed>"
+  },
+  UNLINK: {
+    resp2: "int<unlinked>",
+    resp3: "int<unlinked>"
+  },
+  TYPE: {
+    resp2: "simple<none|string|list|set|zset|hash|stream>",
+    resp3: "simple<none|string|list|set|zset|hash|stream>"
+  },
+  EXPIRE: {
+    resp2: "int<0|1>",
+    resp3: "int<0|1>"
+  },
+  PEXPIRE: {
+    resp2: "int<0|1>",
+    resp3: "int<0|1>"
+  },
+  TTL: {
+    resp2: "int<seconds | -1 | -2>",
+    resp3: "int<seconds | -1 | -2>"
+  },
+  PTTL: {
+    resp2: "int<milliseconds | -1 | -2>",
+    resp3: "int<milliseconds | -1 | -2>"
+  },
+  SCAN: {
+    resp2: "[bulk cursor, [bulk key, ...]]",
+    resp3: "[blob cursor, [blob key, ...]]"
+  },
+  KEYS: {
+    resp2: "[bulk key, ...]",
+    resp3: "[blob key, ...]"
+  },
+  RENAME: {
+    resp2: "simple<OK> | error",
+    resp3: "simple<OK> | error"
+  },
+  GET: {
+    resp2: "bulk<value> | null-bulk",
+    resp3: "blob<value> | null"
+  },
+  SET: {
+    resp2: "simple<OK> | null-bulk | bulk<old-value>",
+    resp3: "simple<OK> | null | blob<old-value>"
+  },
+  MGET: {
+    resp2: "[bulk<value> | null-bulk, ...]",
+    resp3: "[blob<value> | null, ...]"
+  },
+  MSET: {
+    resp2: "simple<OK>",
+    resp3: "simple<OK>"
+  },
+  INCR: {
+    resp2: "int<new-value> | error",
+    resp3: "int<new-value> | error"
+  },
+  DECR: {
+    resp2: "int<new-value> | error",
+    resp3: "int<new-value> | error"
+  },
+  APPEND: {
+    resp2: "int<byte-length>",
+    resp3: "int<byte-length>"
+  },
+  STRLEN: {
+    resp2: "int<byte-length>",
+    resp3: "int<byte-length>"
+  },
+  GETRANGE: {
+    resp2: "bulk<slice>",
+    resp3: "blob<slice>"
+  },
+  HGET: {
+    resp2: "bulk<value> | null-bulk",
+    resp3: "blob<value> | null"
+  },
+  HSET: {
+    resp2: "int<new-fields>",
+    resp3: "int<new-fields>"
+  },
+  HMGET: {
+    resp2: "[bulk<value> | null-bulk, ...]",
+    resp3: "[blob<value> | null, ...]"
+  },
+  HGETALL: {
+    resp2: "[bulk field, bulk value, ...]",
+    resp3: "Map<blob field, blob value>"
+  },
+  HDEL: {
+    resp2: "int<removed-fields>",
+    resp3: "int<removed-fields>"
+  },
+  HEXISTS: {
+    resp2: "int<0|1>",
+    resp3: "int<0|1>"
+  },
+  HSCAN: {
+    resp2: "[bulk cursor, [bulk field, bulk value, ...]]",
+    resp3: "[blob cursor, [blob field, blob value, ...]]"
+  },
+  LPUSH: {
+    resp2: "int<list-length>",
+    resp3: "int<list-length>"
+  },
+  RPUSH: {
+    resp2: "int<list-length>",
+    resp3: "int<list-length>"
+  },
+  LPOP: {
+    resp2: "bulk<element> | null-bulk\n[count]: [bulk element, ...] | null-bulk",
+    resp3: "blob<element> | null\n[count]: [blob element, ...] | null"
+  },
+  RPOP: {
+    resp2: "bulk<element> | null-bulk\n[count]: [bulk element, ...] | null-bulk",
+    resp3: "blob<element> | null\n[count]: [blob element, ...] | null"
+  },
+  LRANGE: {
+    resp2: "[bulk element, ...]",
+    resp3: "[blob element, ...]"
+  },
+  LLEN: {
+    resp2: "int<list-length>",
+    resp3: "int<list-length>"
+  },
+  BLPOP: {
+    resp2: "[bulk key, bulk element] | null-array",
+    resp3: "[blob key, blob element] | null"
+  },
+  BRPOP: {
+    resp2: "[bulk key, bulk element] | null-array",
+    resp3: "[blob key, blob element] | null"
+  },
+  SADD: {
+    resp2: "int<new-members>",
+    resp3: "int<new-members>"
+  },
+  SREM: {
+    resp2: "int<removed-members>",
+    resp3: "int<removed-members>"
+  },
+  SMEMBERS: {
+    resp2: "[bulk member, ...]",
+    resp3: "Set<blob member>"
+  },
+  SISMEMBER: {
+    resp2: "int<0|1>",
+    resp3: "int<0|1>"
+  },
+  SCARD: {
+    resp2: "int<cardinality>",
+    resp3: "int<cardinality>"
+  },
+  SSCAN: {
+    resp2: "[bulk cursor, [bulk member, ...]]",
+    resp3: "[blob cursor, [blob member, ...]]"
+  },
+  ZADD: {
+    resp2: "int<added-or-changed>\n[INCR]: bulk<new-score>",
+    resp3: "int<added-or-changed>\n[INCR]: double<new-score> | blob<new-score>"
+  },
+  ZRANGE: {
+    resp2: "[bulk member, ...]\n[WITHSCORES]: [bulk member, bulk score, ...]",
+    resp3: "[blob member, ...]\n[WITHSCORES]: [blob member, blob score, ...]"
+  },
+  ZREM: {
+    resp2: "int<removed-members>",
+    resp3: "int<removed-members>"
+  },
+  ZSCORE: {
+    resp2: "bulk<score> | null-bulk",
+    resp3: "double<score> | blob<score> | null"
+  },
+  ZRANK: {
+    resp2: "int<rank> | null-bulk\n[WITHSCORE]: [int rank, bulk score]",
+    resp3: "int<rank> | null\n[WITHSCORE]: [int rank, double score | blob score]"
+  },
+  ZCARD: {
+    resp2: "int<cardinality>",
+    resp3: "int<cardinality>"
+  },
+  ZSCAN: {
+    resp2: "[bulk cursor, [bulk member, bulk score, ...]]",
+    resp3: "[blob cursor, [blob member, blob score, ...]]"
+  },
+  XADD: {
+    resp2: "bulk<entry-id> | null-bulk",
+    resp3: "blob<entry-id> | null"
+  },
+  XRANGE: {
+    resp2: "[[bulk id, [bulk field, bulk value, ...]], ...]",
+    resp3: "[[blob id, Map<blob field, blob value>], ...]"
+  },
+  XREAD: {
+    resp2: "[[bulk stream, [[bulk id, [bulk field, bulk value, ...]], ...]], ...] | null-array",
+    resp3: "Map<blob stream, [[blob id, Map<blob field, blob value>], ...]> | null"
+  },
+  XGROUP: {
+    resp2: "simple<OK> | int<count> | error",
+    resp3: "simple<OK> | int<count> | error"
+  },
+  XREADGROUP: {
+    resp2: "[[bulk stream, [[bulk id, [bulk field, bulk value, ...]], ...]], ...] | null-array",
+    resp3: "Map<blob stream, [[blob id, Map<blob field, blob value>], ...]> | null"
+  },
+  XACK: {
+    resp2: "int<acked>",
+    resp3: "int<acked>"
+  },
+  SUBSCRIBE: {
+    resp2: "[bulk subscribe, bulk channel, int count]\n[bulk message, bulk channel, bulk payload]",
+    resp3: "Push<subscribe|message, blob channel, blob payload?>"
+  },
+  PSUBSCRIBE: {
+    resp2: "[bulk psubscribe, bulk pattern, int count]\n[bulk pmessage, bulk pattern, bulk channel, bulk payload]",
+    resp3: "Push<psubscribe|pmessage, blob pattern, blob channel?, blob payload?>"
+  },
+  PUBLISH: {
+    resp2: "int<receivers>",
+    resp3: "int<receivers>"
+  },
+  UNSUBSCRIBE: {
+    resp2: "[bulk unsubscribe, bulk channel, int remaining]",
+    resp3: "Push<unsubscribe, blob channel, int remaining>"
+  },
+  MULTI: {
+    resp2: "simple<OK>",
+    resp3: "simple<OK>"
+  },
+  EXEC: {
+    resp2: "[reply, ...] | null-array",
+    resp3: "[reply, ...] | null"
+  },
+  DISCARD: {
+    resp2: "simple<OK>",
+    resp3: "simple<OK>"
+  },
+  WATCH: {
+    resp2: "simple<OK>",
+    resp3: "simple<OK>"
+  },
+  UNWATCH: {
+    resp2: "simple<OK>",
+    resp3: "simple<OK>"
+  },
+  EVAL: {
+    resp2: "bulk | int | [reply, ...] | null-bulk | simple | error",
+    resp3: "blob | int | [reply, ...] | null | simple | error"
+  },
+  EVALSHA: {
+    resp2: "bulk | int | [reply, ...] | null-bulk | simple | error<NOSCRIPT>",
+    resp3: "blob | int | [reply, ...] | null | simple | error<NOSCRIPT>"
+  },
+  "SCRIPT LOAD": {
+    resp2: "bulk<sha1>",
+    resp3: "blob<sha1>"
+  },
+  "SCRIPT EXISTS": {
+    resp2: "[int<0|1>, ...]",
+    resp3: "[int<0|1>, ...]"
+  },
+  "CLUSTER SLOTS": {
+    resp2: "[[int start, int end, [bulk host, int port, bulk id, ...], ...], ...]",
+    resp3: "[[int start, int end, node, ...], ...] | Map"
+  },
+  "CLUSTER NODES": {
+    resp2: "bulk<node-lines>",
+    resp3: "blob<node-lines>"
+  },
+  ASKING: {
+    resp2: "simple<OK>",
+    resp3: "simple<OK>"
+  },
+  READONLY: {
+    resp2: "simple<OK>",
+    resp3: "simple<OK>"
+  }
+};
+
+const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) => typedReplies[name]?.[mode] ?? fallback;
 ---
 
 <!doctype html>
@@ -96,6 +417,19 @@ const categoryIds = new Map(categories.map((category) => [category, category.toL
         </section>
 
         <section class="tag-strip" aria-label="Concern filters">
+          <details class="notation-legend">
+            <summary>reply notation</summary>
+            <div class="legend-grid">
+              <code>simple</code><span>RESP simple string</span>
+              <code>bulk</code><span>RESP2 bulk string</span>
+              <code>blob</code><span>RESP3 blob string</span>
+              <code>int</code><span>RESP integer</span>
+              <code>null-bulk</code><span>RESP2 <code>$-1</code></span>
+              <code>null-array</code><span>RESP2 <code>*-1</code></span>
+              <code>null</code><span>RESP3 <code>_</code></span>
+              <code>reply</code><span>any nested RESP reply</span>
+            </div>
+          </details>
           <button class="tag active" type="button" data-tag="all">all</button>
           {tagCloud.map((tag) => <button class="tag" type="button" data-tag={tag}>{tag}</button>)}
         </section>
@@ -115,7 +449,10 @@ const categoryIds = new Map(categories.map((category) => [category, category.toL
               <div class="command-grid">
                 {commands
                   .filter((command) => command.category === category)
-                  .map((command) => (
+                  .map((command) => {
+                    const resp2Shape = getTypedReply(command.name, "resp2", command.resp2);
+                    const resp3Shape = getTypedReply(command.name, "resp3", command.resp3);
+                    return (
                     <article
                       class="command-card"
                       data-command-card
@@ -152,7 +489,10 @@ const categoryIds = new Map(categories.map((category) => [category, category.toL
                         </div>
                         <div>
                           <h4>Reply</h4>
-                          <p class="reply" data-resp2={command.resp2} data-resp3={command.resp3}>{command.resp2}</p>
+                          <div class="reply-panel">
+                            <pre class="reply-code" data-resp2-shape={resp2Shape} data-resp3-shape={resp3Shape}>{resp2Shape}</pre>
+                            <p class="reply-summary" data-resp2-note={command.resp2} data-resp3-note={command.resp3}>{command.resp2}</p>
+                          </div>
                         </div>
                       </div>
 
@@ -165,7 +505,8 @@ const categoryIds = new Map(categories.map((category) => [category, category.toL
                         </ul>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
               </div>
             </section>
           ))
@@ -189,8 +530,11 @@ const categoryIds = new Map(categories.map((category) => [category, category.toL
         modeLabels.forEach((node) => {
           node.textContent = label;
         });
-        document.querySelectorAll("[data-resp2]").forEach((node) => {
-          node.textContent = node.dataset[mode] || "";
+        document.querySelectorAll("[data-resp2-shape]").forEach((node) => {
+          node.textContent = node.dataset[`${mode}Shape`] || "";
+        });
+        document.querySelectorAll("[data-resp2-note]").forEach((node) => {
+          node.textContent = node.dataset[`${mode}Note`] || "";
         });
         document.documentElement.dataset.respMode = mode;
       }
