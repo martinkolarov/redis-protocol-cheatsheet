@@ -565,9 +565,9 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XREAD [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] id [id ...]",
     params: ["STREAMS: keys followed by matching last-seen IDs.", "BLOCK: optional blocking wait."],
-    resp2: "Success is a stream result array. With BLOCK, Redis waits until entries can be served, then returns the same stream result shape. Null array means no stream can be served immediately without BLOCK, or BLOCK timed out.",
-    resp3: "Success is a stream result map. With BLOCK, Redis waits until entries can be served, then returns the same stream result shape. Null _ means no stream can be served immediately without BLOCK, or BLOCK timed out.",
-    notes: ["With BLOCK, Redis returns synchronously if data is already available. If it waits, the success reply keeps the same schema and contains the entries Redis serves when the wait completes. BLOCK 0 waits indefinitely."],
+    resp2: "Success is an array of served streams: each item is [stream key, entries]. With BLOCK, a later success still uses that shape, but includes the stream key(s) Redis can serve when the wait completes. Null array means no stream can be served immediately without BLOCK, or BLOCK timed out.",
+    resp3: "Success is a map of served stream key => entries. With BLOCK, a later success still uses that shape, but includes the stream key(s) Redis can serve when the wait completes. Null _ means no stream can be served immediately without BLOCK, or BLOCK timed out.",
+    notes: ["With BLOCK, Redis returns synchronously if data is already available. If it waits, the reply is not an echo of every requested STREAMS key; for a single XADD that wakes the read, it contains the stream that received the entry. BLOCK 0 waits indefinitely."],
     tags: ["stream", "blocking", "array", "map", "nil"]
   },
   {
@@ -584,9 +584,9 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XREADGROUP GROUP group consumer [COUNT count] [BLOCK ms] [NOACK] STREAMS key [key ...] id [id ...]",
     params: ["group/consumer: consumer group identity.", "id: > for new messages or explicit pending IDs."],
-    resp2: "Success is a stream result array. With BLOCK, Redis waits until entries can be served, then returns the same stream result shape. Null array means no entries can be served immediately without BLOCK, or BLOCK timed out.",
-    resp3: "Success is a stream result map. With BLOCK, Redis waits until entries can be served, then returns the same stream result shape. Null _ means no entries can be served immediately without BLOCK, or BLOCK timed out.",
-    notes: ["Using > reads never-delivered entries. With BLOCK, Redis returns synchronously if data is already available. If it waits, the success reply keeps the same schema and contains the entries Redis serves when the wait completes."],
+    resp2: "Success is an array of served streams: each item is [stream key, entries]. With BLOCK, a later success still uses that shape, but includes the stream key(s) Redis can serve when the wait completes. Null array means no entries can be served immediately without BLOCK, or BLOCK timed out.",
+    resp3: "Success is a map of served stream key => entries. With BLOCK, a later success still uses that shape, but includes the stream key(s) Redis can serve when the wait completes. Null _ means no entries can be served immediately without BLOCK, or BLOCK timed out.",
+    notes: ["Using > reads never-delivered entries. With BLOCK, Redis returns synchronously if data is already available. If it waits, the reply is not an echo of every requested STREAMS key; for a single XADD that wakes the read, it contains the stream that received the entry."],
     tags: ["stream", "blocking", "group", "map", "nil"]
   },
   {
