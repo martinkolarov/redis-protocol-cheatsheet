@@ -61,8 +61,6 @@ select {
 
 code,
 .signature,
-.reply-code,
-.reply-summary,
 .inspector-tabs,
 .inspector-output,
 .notation-legend {
@@ -485,30 +483,7 @@ h1 {
 
 .reply-panel {
   display: grid;
-  gap: 8px;
-}
-
-.reply-code {
-  min-height: 84px;
-  margin: 0;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  border: 1px solid rgba(255, 209, 102, 0.22);
-  border-left: 2px solid var(--amber);
-  border-radius: 6px;
-  background: rgba(255, 209, 102, 0.06);
-  color: #ffe29b;
-  padding: 10px 12px;
-  line-height: 1.5;
-  font-size: 0.88rem;
-}
-
-.reply-summary {
-  margin: 0;
-  color: var(--dim);
-  line-height: 1.45;
-  font-size: 0.82rem;
+  gap: 10px;
 }
 
 .reply-inspector {

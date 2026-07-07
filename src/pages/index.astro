@@ -971,8 +971,6 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                         <div>
                           <h4>Reply</h4>
                           <div class="reply-panel">
-                            <pre class="reply-code" data-resp2-shape={resp2Shape} data-resp3-shape={resp3Shape}>{resp2Shape}</pre>
-                            <p class="reply-summary" data-resp2-note={command.resp2} data-resp3-note={command.resp3}>{command.resp2}</p>
                             <div class="reply-inspector" data-reply-inspector data-command-name={command.name}>
                               <div class="inspector-tabs" role="tablist" aria-label={`${command.name} reply views`}>
                                 <button class="active" type="button" data-inspector-tab="tree">Tree</button>
@@ -1473,12 +1471,6 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         const label = mode.toUpperCase();
         modeLabels.forEach((node) => {
           node.textContent = label;
-        });
-        document.querySelectorAll("[data-resp2-shape]").forEach((node) => {
-          node.textContent = node.dataset[`${mode}Shape`] || "";
-        });
-        document.querySelectorAll("[data-resp2-note]").forEach((node) => {
-          node.textContent = node.dataset[`${mode}Note`] || "";
         });
         document.querySelectorAll("[data-active-view]").forEach(updateInspectorOutput);
         document.documentElement.dataset.respMode = mode;
