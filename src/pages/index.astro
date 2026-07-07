@@ -326,6 +326,161 @@ const typedReplies: Record<string, { resp2: string; resp3: string }> = {
 };
 
 const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) => typedReplies[name]?.[mode] ?? fallback;
+
+const keyspaceCommands = new Set([
+  "EXISTS",
+  "DEL",
+  "UNLINK",
+  "TYPE",
+  "EXPIRE",
+  "PEXPIRE",
+  "TTL",
+  "PTTL",
+  "RENAME",
+  "GET",
+  "SET",
+  "MGET",
+  "MSET",
+  "INCR",
+  "DECR",
+  "APPEND",
+  "STRLEN",
+  "GETRANGE",
+  "HGET",
+  "HSET",
+  "HMGET",
+  "HGETALL",
+  "HDEL",
+  "HEXISTS",
+  "HSCAN",
+  "LPUSH",
+  "RPUSH",
+  "LPOP",
+  "RPOP",
+  "LRANGE",
+  "LLEN",
+  "BLPOP",
+  "BRPOP",
+  "SADD",
+  "SREM",
+  "SMEMBERS",
+  "SISMEMBER",
+  "SCARD",
+  "SSCAN",
+  "ZADD",
+  "ZRANGE",
+  "ZREM",
+  "ZSCORE",
+  "ZRANK",
+  "ZCARD",
+  "ZSCAN",
+  "XADD",
+  "XRANGE",
+  "XREAD",
+  "XGROUP",
+  "XREADGROUP",
+  "XACK"
+]);
+
+const writeCommands = new Set([
+  "DEL",
+  "UNLINK",
+  "EXPIRE",
+  "PEXPIRE",
+  "RENAME",
+  "SET",
+  "MSET",
+  "INCR",
+  "DECR",
+  "APPEND",
+  "HSET",
+  "HDEL",
+  "LPUSH",
+  "RPUSH",
+  "LPOP",
+  "RPOP",
+  "BLPOP",
+  "BRPOP",
+  "SADD",
+  "SREM",
+  "ZADD",
+  "ZREM",
+  "XADD",
+  "XGROUP",
+  "XREADGROUP",
+  "XACK",
+  "PUBLISH",
+  "EVAL",
+  "EVALSHA",
+  "SCRIPT LOAD"
+]);
+
+const typeCheckedCategories = new Set(["Strings", "Hashes", "Lists", "Sets", "Sorted Sets", "Streams"]);
+const noGenericWrongType = new Set(["SET", "MGET", "MSET"]);
+
+const numericArgNames = ["seconds", "milliseconds", "index", "cursor", "count", "start", "stop", "increment", "timeout", "score", "rank", "numkeys", "port", "slot"];
+
+const commandErrorCases: Record<string, string[]> = {
+  HELLO: ["Unsupported protover -> -NOPROTO unsupported protocol version.", "AUTH option failure -> -WRONGPASS invalid username-password pair or user disabled."],
+  AUTH: ["Bad credentials -> -WRONGPASS invalid username-password pair or user disabled.", "AUTH when no password is configured -> -ERR AUTH <password> called without any password configured."],
+  SELECT: ["Invalid DB index -> -ERR invalid DB index.", "Cluster mode DB other than 0 -> -ERR SELECT is not allowed in cluster mode."],
+  CLIENT: ["Unknown subcommand or blocked operation -> -ERR with subcommand-specific text.", "CLIENT REPLY OFF/SKIP changes whether later errors are delivered to the client."],
+  RENAME: ["Missing source key -> -ERR no such key."],
+  SET: ["NX/XX condition miss is not an error; return null instead.", "Conflicting expiry or condition options -> -ERR syntax error.", "With GET, an existing non-string value -> -WRONGTYPE."],
+  INCR: ["Value is not a base-10 signed 64-bit integer -> -ERR value is not an integer or out of range.", "Overflow -> -ERR increment or decrement would overflow."],
+  DECR: ["Value is not a base-10 signed 64-bit integer -> -ERR value is not an integer or out of range.", "Overflow -> -ERR increment or decrement would overflow."],
+  GETRANGE: ["Invalid range indexes -> -ERR value is not an integer or out of range."],
+  BLPOP: ["Timeout is not an error; return null array/null when no element becomes available.", "Negative timeout -> -ERR timeout is negative."],
+  BRPOP: ["Timeout is not an error; return null array/null when no element becomes available.", "Negative timeout -> -ERR timeout is negative."],
+  ZADD: ["Invalid score -> -ERR value is not a valid float.", "Conflicting NX/XX/GT/LT options -> -ERR syntax error."],
+  ZSCORE: ["Missing member/key is not an error; return null."],
+  XADD: ["ID not greater than stream top item -> -ERR The ID specified in XADD is equal or smaller than the target stream top item.", "MAXLEN/MINID syntax or bad ID -> -ERR with stream-specific text."],
+  XREAD: ["Timeout is not an error; return null array/null when BLOCK expires.", "Malformed stream ID or COUNT/BLOCK value -> -ERR with stream-specific text."],
+  XGROUP: ["Missing stream/group/consumer state can produce -NOGROUP or -BUSYGROUP depending on subcommand.", "Bad stream ID -> -ERR with stream-specific text."],
+  XREADGROUP: ["Unknown group or missing key group state -> -NOGROUP.", "Timeout is not an error; return null array/null when BLOCK expires."],
+  XACK: ["Unknown group or missing key group state -> -NOGROUP."],
+  SUBSCRIBE: ["In RESP2 subscribed mode, only a limited command set is accepted; other commands return -ERR.", "Malformed channel arguments -> -ERR wrong number of arguments."],
+  PSUBSCRIBE: ["In RESP2 subscribed mode, only a limited command set is accepted; other commands return -ERR.", "Malformed pattern arguments -> -ERR wrong number of arguments."],
+  PUBLISH: ["Invalid argument count -> -ERR wrong number of arguments."],
+  MULTI: ["Nested MULTI -> -ERR MULTI calls can not be nested."],
+  EXEC: ["Watched key changed -> null array/null, not an error.", "Queued command failure before EXEC -> -EXECABORT Transaction discarded because of previous errors."],
+  DISCARD: ["Without MULTI -> -ERR DISCARD without MULTI."],
+  WATCH: ["Inside MULTI -> -ERR WATCH inside MULTI is not allowed."],
+  EVAL: ["Script runtime error -> -ERR Error running script.", "Wrong numkeys or undeclared cluster keys -> -ERR/-CROSSSLOT depending on mode."],
+  EVALSHA: ["Unknown SHA1 -> -NOSCRIPT No matching script. Please use EVAL.", "Script runtime error -> -ERR Error running script."],
+  "SCRIPT LOAD": ["Invalid Lua source -> -ERR Error compiling script."],
+  "CLUSTER SLOTS": ["Cluster support disabled -> -ERR This instance has cluster support disabled."],
+  "CLUSTER NODES": ["Cluster support disabled -> -ERR This instance has cluster support disabled."],
+  ASKING: ["Cluster support disabled -> -ERR This instance has cluster support disabled."],
+  READONLY: ["Cluster support disabled -> -ERR This instance has cluster support disabled."]
+};
+
+const hasNumericArgs = (command: { signature: string; params: string[] }) => {
+  const text = `${command.signature} ${command.params.join(" ")}`.toLowerCase();
+  return numericArgNames.some((name) => new RegExp(`\\b${name}\\b`).test(text));
+};
+
+const getErrorCases = (command: { name: string; category: string; signature: string; params: string[]; tags: string[] }) => {
+  const cases = ["Bad arity or malformed options -> -ERR wrong number of arguments or -ERR syntax error."];
+
+  if (typeCheckedCategories.has(command.category) && !noGenericWrongType.has(command.name)) {
+    cases.push("Existing key with incompatible type -> -WRONGTYPE Operation against a key holding the wrong kind of value.");
+  }
+
+  if (hasNumericArgs(command)) {
+    cases.push("Non-integer integer argument or out-of-range value -> -ERR value is not an integer or out of range.");
+  }
+
+  if (keyspaceCommands.has(command.name)) {
+    cases.push("Cluster slot owner mismatch -> -MOVED; temporary migration target -> -ASK, then retry after ASKING.");
+  }
+
+  if (writeCommands.has(command.name)) {
+    cases.push("Write attempted against a read-only replica or read-only script context -> -READONLY.");
+  }
+
+  return [...cases, ...(commandErrorCases[command.name] ?? [])];
+};
 ---
 
 <!doctype html>
@@ -420,11 +575,16 @@ const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) 
             </article>
             <article>
               <h3>RESP3 replies</h3>
-              <p>Adds native <code>_</code> null, <code>#</code> boolean, <code>,</code> double, <code>%</code> map, <code>~</code> set, and <code>&gt;</code> push.</p>
-              <p>Use <code>HELLO 3</code> to switch a connection from RESP2 to RESP3.</p>
-            </article>
-          </div>
-        </section>
+          <p>Adds native <code>_</code> null, <code>#</code> boolean, <code>,</code> double, <code>%</code> map, <code>~</code> set, and <code>&gt;</code> push.</p>
+          <p>Use <code>HELLO 3</code> to switch a connection from RESP2 to RESP3.</p>
+        </article>
+        <article>
+          <h3>Errors</h3>
+          <p>Errors are RESP error replies: <code>-PREFIX message\r\n</code>. The prefix is the stable part clients should classify.</p>
+          <p>Common prefixes include <code>ERR</code>, <code>WRONGTYPE</code>, <code>NOAUTH</code>, <code>NOSCRIPT</code>, <code>MOVED</code>, <code>ASK</code>, and <code>READONLY</code>.</p>
+        </article>
+      </div>
+    </section>
 
         <section class="tag-strip" aria-label="Concern filters">
           <details class="notation-legend">
@@ -437,6 +597,7 @@ const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) 
               <code>null-bulk</code><span>RESP2 <code>$-1</code></span>
               <code>null-array</code><span>RESP2 <code>*-1</code></span>
               <code>null</code><span>RESP3 <code>_</code></span>
+              <code>error&lt;PREFIX&gt;</code><span>RESP error; classify by prefix</span>
               <code>reply</code><span>any nested RESP reply</span>
             </div>
           </details>
@@ -462,6 +623,7 @@ const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) 
                   .map((command) => {
                     const resp2Shape = getTypedReply(command.name, "resp2", command.resp2);
                     const resp3Shape = getTypedReply(command.name, "resp3", command.resp3);
+                    const errorCases = getErrorCases(command);
                     return (
                     <article
                       class="command-card"
@@ -469,7 +631,7 @@ const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) 
                       data-name={command.name.toLowerCase()}
                       data-category={command.category}
                       data-tags={command.tags.join(" ")}
-                      data-search={`${command.name} ${command.category} ${command.signature} ${command.params.join(" ")} ${command.notes.join(" ")} ${command.tags.join(" ")}`.toLowerCase()}
+                      data-search={`${command.name} ${command.category} ${command.signature} ${command.params.join(" ")} ${command.notes.join(" ")} ${errorCases.join(" ")} ${command.tags.join(" ")}`.toLowerCase()}
                     >
                       <header class="card-head">
                         <div>
@@ -511,6 +673,15 @@ const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) 
                         <ul>
                           {command.notes.map((note) => (
                             <li>{note}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div class="error-cases">
+                        <h4>Error cases</h4>
+                        <ul>
+                          {errorCases.map((errorCase) => (
+                            <li>{errorCase}</li>
                           ))}
                         </ul>
                       </div>
