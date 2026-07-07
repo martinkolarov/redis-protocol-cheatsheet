@@ -962,7 +962,10 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                                 <button type="button" data-inspector-tab="decoded">Value</button>
                               </div>
                               <div class="inspector-toolbar">
-                                <div class="scenario-tabs" data-scenario-tabs></div>
+                                <label class="outcome-picker" data-outcome-picker>
+                                  <span>Outcome</span>
+                                  <select data-outcome-select aria-label={`${command.name} reply outcome`}></select>
+                                </label>
                                 <div class="inspector-actions">
                                   <button type="button" data-raw-toggle>Raw</button>
                                   <button type="button" data-expand-all>Expand</button>
@@ -972,7 +975,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                               <div
                                 class="inspector-output"
                                 data-active-view="tree"
-                                data-active-scenario="success"
+                                data-active-outcome="success"
                                 data-resp2-tree={replyInspector.resp2.tree}
                                 data-resp2-wire={replyInspector.resp2.wire}
                                 data-resp2-decoded={replyInspector.resp2.decoded}
@@ -1151,6 +1154,55 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         }));
       }
 
+      function humanizeOutcome(value) {
+        return value
+          .replace(/([a-z])([A-Z])/g, "$1 $2")
+          .replace(/[-_]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      function normalizeOutcomeId(name) {
+        const lower = humanizeOutcome(name).toLowerCase();
+        if (lower.includes("non blocking") && lower.includes("no data")) return "no-data-now";
+        if (lower.includes("non blocking") && lower.includes("data")) return "data-available-now";
+        if (lower.includes("blocking") && lower.includes("timeout")) return "blocked-timeout";
+        if (lower.includes("blocking") && lower.includes("data")) return "blocked-then-data";
+        if (lower.includes("no data")) return "no-data-now";
+        if (lower.includes("timeout")) return "timeout";
+        if (lower.includes("missing key")) return "missing-key";
+        if (lower.includes("condition")) return "condition-miss";
+        if (lower.includes("previous missing")) return "previous-missing";
+        if (lower.includes("previous value")) return "previous-value";
+        if (lower.includes("nomkstream")) return "nomkstream";
+        if (lower.includes("watch")) return "watch-abort";
+        if (lower.includes("increment") || lower.includes("incr")) return "incremented-score";
+        if (lower.includes("changed") || lower.includes("set or deleted")) return "success";
+        if (lower === "nil" || lower === "null") return "empty";
+        if (lower === "value") return "success";
+        return lower.replace(/\s+/g, "-") || "success";
+      }
+
+      function getOutcomeLabel(id) {
+        const labels = {
+          "success": "Success",
+          "empty": "Empty",
+          "timeout": "Timeout",
+          "condition-miss": "Condition miss",
+          "previous-value": "Previous value",
+          "previous-missing": "Previous missing",
+          "blocked-then-data": "Blocked then data",
+          "blocked-timeout": "Blocked timeout",
+          "data-available-now": "Data available now",
+          "no-data-now": "No data now",
+          "watch-abort": "Watch abort",
+          "nomkstream": "NOMKSTREAM",
+          "missing-key": "Missing key",
+          "incremented-score": "Incremented score"
+        };
+        return labels[id] || humanizeOutcome(id).replace(/^./, (char) => char.toUpperCase());
+      }
+
       function splitScenarioText(text, defaultName = "success") {
         const scenarios = [];
         let current = { name: defaultName, text: "" };
@@ -1183,7 +1235,11 @@ const getErrorCases = (command: { name: string; category: string; signature: str
           scenarios.push({ name: normalizeScenarioName(nameLine), text: rest.join("\n").trim() });
         });
 
-        return scenarios.filter((scenario) => scenario.text);
+        return scenarios.filter((scenario) => scenario.text).map((scenario) => ({
+          ...scenario,
+          id: normalizeOutcomeId(scenario.name),
+          label: getOutcomeLabel(normalizeOutcomeId(scenario.name))
+        }));
       }
 
       function parseValueScenarios(text) {
@@ -1215,12 +1271,15 @@ const getErrorCases = (command: { name: string; category: string; signature: str
               ].includes(key)
             );
             if (scenarioKeys.length > 1) {
-              return scenarioKeys.map((key) => ({ name: key.replace(/([A-Z])/g, " $1").toLowerCase(), value: parsed[key] }));
+              return scenarioKeys.map((key) => {
+                const id = normalizeOutcomeId(key);
+                return { id, name: key, label: getOutcomeLabel(id), value: parsed[key] };
+              });
             }
           }
-          return [{ name: "value", value: parsed }];
+          return [{ id: "success", name: "value", label: "Success", value: parsed }];
         } catch {
-          return [{ name: "value", value: text }];
+          return [{ id: "success", name: "value", label: "Success", value: text }];
         }
       }
 
@@ -1264,35 +1323,72 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         return { label: `${label}: ${value === null ? "null" : JSON.stringify(value)}`, type: value === null ? "null" : typeof value };
       }
 
-      function setScenarioTabs(inspector, scenarios, activeName, onSelect) {
-        const tabs = inspector.querySelector("[data-scenario-tabs]");
-        clearNode(tabs);
-        tabs.hidden = scenarios.length <= 1;
-        scenarios.forEach((scenario) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.textContent = scenario.name;
-          button.classList.toggle("active", scenario.name === activeName);
-          button.addEventListener("click", () => onSelect(scenario.name));
-          tabs.append(button);
+      function getInspectorPayload(output) {
+        const modePrefix = currentMode;
+        const wire = output.dataset[`${modePrefix}Wire`] || "";
+        const decoded = output.dataset[`${modePrefix}Decoded`] || "";
+        const tree = output.dataset[`${modePrefix}Tree`] || "";
+        let wireOutcomes = splitScenarioText(wire);
+        const valueOutcomes = parseValueScenarios(decoded);
+        if (
+          wireOutcomes[0]?.id === "success" &&
+          valueOutcomes.length > 1 &&
+          !valueOutcomes.some((outcome) => outcome.id === "success")
+        ) {
+          wireOutcomes = wireOutcomes.map((outcome, index) =>
+            index === 0 ? { ...outcome, id: valueOutcomes[0].id, label: valueOutcomes[0].label } : outcome
+          );
+        }
+        const byId = new Map();
+
+        [...wireOutcomes, ...valueOutcomes].forEach((outcome) => {
+          const existing = byId.get(outcome.id) || { id: outcome.id, label: outcome.label };
+          byId.set(outcome.id, { ...existing, ...outcome, label: existing.label || outcome.label });
         });
+
+        if (byId.size === 0) {
+          byId.set("success", { id: "success", label: "Success" });
+        }
+
+        return { tree, outcomes: Array.from(byId.values()), wireOutcomes, valueOutcomes };
       }
 
-      function renderTreeView(output, text) {
+      function syncOutcomePicker(inspector, output, outcomes) {
+        const picker = inspector.querySelector("[data-outcome-picker]");
+        const select = inspector.querySelector("[data-outcome-select]");
+        const previous = output.dataset.activeOutcome || "success";
+        const active = outcomes.some((outcome) => outcome.id === previous)
+          ? previous
+          : outcomes.find((outcome) => outcome.id === "success")?.id || outcomes[0]?.id || "success";
+
+        output.dataset.activeOutcome = active;
+        clearNode(select);
+        outcomes.forEach((outcome) => {
+          const option = document.createElement("option");
+          option.value = outcome.id;
+          option.textContent = outcome.label;
+          option.selected = outcome.id === active;
+          select.append(option);
+        });
+        picker.hidden = outcomes.length <= 1;
+      }
+
+      function renderTreeView(output, text, outcome, valueScenario, hasMultipleOutcomes) {
+        if (outcome && valueScenario && hasMultipleOutcomes) {
+          const children = valueScenario ? [valueNodeShape(valueScenario.value, outcome.label.toLowerCase())] : [parseTreeLines(text)];
+          output.append(renderNestedNode({
+            label: `selected outcome: ${outcome.label}`,
+            type: inferBadge(outcome.id),
+            open: true,
+            children
+          }));
+          return;
+        }
         output.append(renderNestedNode(parseTreeLines(text)));
       }
 
-      function renderWireView(inspector, output, text) {
+      function renderWireView(inspector, output, scenario) {
         const rawMode = inspector.dataset.rawMode === "true";
-        const scenarios = splitScenarioText(text);
-        const activeScenario = scenarios.some((scenario) => scenario.name === output.dataset.activeScenario) ? output.dataset.activeScenario : scenarios[0]?.name;
-        output.dataset.activeScenario = activeScenario || "success";
-        setScenarioTabs(inspector, scenarios, output.dataset.activeScenario, (name) => {
-          output.dataset.activeScenario = name;
-          updateInspectorOutput(output);
-        });
-
-        const scenario = scenarios.find((item) => item.name === output.dataset.activeScenario) || scenarios[0];
         if (!scenario) return;
 
         if (rawMode) {
@@ -1306,31 +1402,26 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         parseWireScenario(scenario.text).forEach((frame) => output.append(renderNestedNode(frame, { type: "frame", open: false })));
       }
 
-      function renderValueView(inspector, output, text) {
-        const scenarios = parseValueScenarios(text);
-        const activeScenario = scenarios.some((scenario) => scenario.name === output.dataset.activeScenario) ? output.dataset.activeScenario : scenarios[0]?.name;
-        output.dataset.activeScenario = activeScenario || "value";
-        setScenarioTabs(inspector, scenarios, output.dataset.activeScenario, (name) => {
-          output.dataset.activeScenario = name;
-          updateInspectorOutput(output);
-        });
-
-        const scenario = scenarios.find((item) => item.name === output.dataset.activeScenario) || scenarios[0];
+      function renderValueView(output, scenario) {
         if (!scenario) return;
-        output.append(renderValueNode(scenario.value, scenario.name));
+        output.append(renderValueNode(scenario.value, scenario.label.toLowerCase()));
       }
 
       function updateInspectorOutput(output) {
         const inspector = output.closest("[data-reply-inspector]");
         const view = output.dataset.activeView || "tree";
-        const text = output.dataset[`${currentMode}${view[0].toUpperCase()}${view.slice(1)}`] || "";
+        const payload = getInspectorPayload(output);
+        syncOutcomePicker(inspector, output, payload.outcomes);
+        const activeOutcome = output.dataset.activeOutcome;
+        const activeWire = payload.wireOutcomes.find((outcome) => outcome.id === activeOutcome) || payload.wireOutcomes[0];
+        const activeValue = payload.valueOutcomes.find((outcome) => outcome.id === activeOutcome) || payload.valueOutcomes[0];
+        const active = payload.outcomes.find((outcome) => outcome.id === activeOutcome);
         clearNode(output);
         inspector.querySelector("[data-raw-toggle]").hidden = view !== "wire";
-        inspector.querySelector("[data-scenario-tabs]").hidden = true;
 
-        if (view === "tree") renderTreeView(output, text);
-        if (view === "wire") renderWireView(inspector, output, text);
-        if (view === "decoded") renderValueView(inspector, output, text);
+        if (view === "tree") renderTreeView(output, payload.tree, active, activeValue, payload.outcomes.length > 1);
+        if (view === "wire") renderWireView(inspector, output, activeWire);
+        if (view === "decoded") renderValueView(output, activeValue);
       }
 
       function updateMode(mode) {
@@ -1386,6 +1477,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
       document.querySelectorAll("[data-reply-inspector]").forEach((inspector) => {
         const output = inspector.querySelector("[data-active-view]");
+        const outcomeSelect = inspector.querySelector("[data-outcome-select]");
         const rawToggle = inspector.querySelector("[data-raw-toggle]");
         const expandAll = inspector.querySelector("[data-expand-all]");
         const collapseAll = inspector.querySelector("[data-collapse-all]");
@@ -1393,12 +1485,16 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         inspector.querySelectorAll("[data-inspector-tab]").forEach((button) => {
           button.addEventListener("click", () => {
             output.dataset.activeView = button.dataset.inspectorTab;
-            output.dataset.activeScenario = button.dataset.inspectorTab === "wire" ? "success" : "value";
             inspector.querySelectorAll("[data-inspector-tab]").forEach((tab) => {
               tab.classList.toggle("active", tab === button);
             });
             updateInspectorOutput(output);
           });
+        });
+
+        outcomeSelect.addEventListener("change", () => {
+          output.dataset.activeOutcome = outcomeSelect.value;
+          updateInspectorOutput(output);
         });
 
         rawToggle.addEventListener("click", () => {

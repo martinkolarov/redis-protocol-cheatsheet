@@ -536,23 +536,47 @@ h1 {
   padding: 8px;
 }
 
-.scenario-tabs,
+.outcome-picker,
 .inspector-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
+.outcome-picker {
+  align-items: center;
+  min-width: 0;
+}
+
+.outcome-picker span {
+  color: var(--dim);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.outcome-picker select {
+  min-width: 160px;
+  max-width: 100%;
+  height: 30px;
+  border: 1px solid rgba(220, 56, 45, 0.42);
+  border-radius: 6px;
+  background: rgba(18, 7, 6, 0.96);
+  color: var(--text);
+  cursor: pointer;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.74rem;
+  padding: 0 8px;
+}
+
 .inspector-actions {
   justify-content: flex-end;
 }
 
-.scenario-tabs[hidden],
+.outcome-picker[hidden],
 .inspector-actions button[hidden] {
   display: none;
 }
 
-.scenario-tabs button,
 .inspector-actions button {
   min-height: 28px;
   border: 1px solid rgba(255, 243, 240, 0.16);
@@ -566,9 +590,7 @@ h1 {
   text-transform: uppercase;
 }
 
-.scenario-tabs button.active,
 .inspector-actions button.active,
-.scenario-tabs button:hover,
 .inspector-actions button:hover {
   border-color: rgba(220, 56, 45, 0.62);
   color: var(--text);
