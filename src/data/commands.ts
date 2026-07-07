@@ -565,9 +565,9 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XREAD [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] id [id ...]",
     params: ["STREAMS: keys followed by matching last-seen IDs.", "BLOCK: optional blocking wait."],
-    resp2: "Null array when non-blocking finds no data or when BLOCK times out; otherwise array of [bulk string stream key, array of entries], where each entry is [bulk string id, flat array of bulk-string field/value pairs].",
-    resp3: "Null _ when non-blocking finds no data or when BLOCK times out; otherwise map of blob-string stream key => array of entries, where each entry is [blob string id, map of blob-string field => blob-string value].",
-    notes: ["Without BLOCK, no matching entries returns immediately as null. With BLOCK, null means the wait timed out. BLOCK 0 waits indefinitely."],
+    resp2: "Success is a stream result array; after a blocked wait it often contains only the stream/entry that satisfied the wait. Null array means no stream can be served immediately without BLOCK, or BLOCK timed out.",
+    resp3: "Success is a stream result map; after a blocked wait it often contains only the stream/entry that satisfied the wait. Null _ means no stream can be served immediately without BLOCK, or BLOCK timed out.",
+    notes: ["With BLOCK, Redis returns synchronously if data is already available. If it waits, the success reply keeps the same schema but commonly has a much smaller payload. BLOCK 0 waits indefinitely."],
     tags: ["stream", "blocking", "array", "map", "nil"]
   },
   {
@@ -584,9 +584,9 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XREADGROUP GROUP group consumer [COUNT count] [BLOCK ms] [NOACK] STREAMS key [key ...] id [id ...]",
     params: ["group/consumer: consumer group identity.", "id: > for new messages or explicit pending IDs."],
-    resp2: "Null array when non-blocking finds no data or when BLOCK times out; otherwise array of [bulk string stream key, array of entries], where each entry is [bulk string id, flat array of bulk-string field/value pairs].",
-    resp3: "Null _ when non-blocking finds no data or when BLOCK times out; otherwise map of blob-string stream key => array of entries, where each entry is [blob string id, map of blob-string field => blob-string value].",
-    notes: ["Using > reads never-delivered entries. Without BLOCK, no matching entries returns immediately as null; with BLOCK, null means the wait timed out."],
+    resp2: "Success is a stream result array; after a blocked wait it often contains only the stream/entry that satisfied the wait. Null array means no entries can be served immediately without BLOCK, or BLOCK timed out.",
+    resp3: "Success is a stream result map; after a blocked wait it often contains only the stream/entry that satisfied the wait. Null _ means no entries can be served immediately without BLOCK, or BLOCK timed out.",
+    notes: ["Using > reads never-delivered entries. With BLOCK, Redis returns synchronously if data is already available; after waiting, the success reply keeps the same schema but commonly has a smaller payload."],
     tags: ["stream", "blocking", "group", "map", "nil"]
   },
   {

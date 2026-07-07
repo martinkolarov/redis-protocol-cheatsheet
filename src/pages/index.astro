@@ -537,26 +537,26 @@ const replyInspectors: Record<string, ReplyInspectorSet> = {
   },
   XREAD: {
     resp2: {
-      tree: "array | null array\n├─ success: stream result array\n│  └─ stream result*\n│     ├─ stream: bulk string\n│     └─ entries: array\n│        └─ entry*\n│           ├─ id: bulk string\n│           └─ fields: array\n│              ├─ field: bulk string\n│              └─ value: bulk string\n├─ no data without BLOCK: null array returned immediately\n└─ BLOCK timeout: null array after wait expires",
-      wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# no data without BLOCK\n*-1\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
-      decoded: '{\n  "success": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]]\n  ],\n  "noData": null,\n  "timeout": null\n}'
+      tree: "request mode\n├─ non-blocking XREAD\n│  ├─ data available: stream result array\n│  │  └─ stream result* for each served stream\n│  │     ├─ stream: bulk string\n│  │     └─ entries: array of [id, fields]\n│  └─ no stream can be served: null array immediately\n└─ blocking XREAD\n   ├─ data already available: same schema, no wait\n   ├─ data arrives before timeout: same schema, usually only stream(s) satisfied by new data\n   ├─ timeout before data: null array after wait expires\n   └─ note: client APIs may unwrap a single-stream blocked result",
+      wire: "*2\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n*2\\r\\n$7\\r\\nwriters\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000001-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$3\\r\\nbob\\r\\n\n# non-blocking no data\n*-1\\r\\n\n# blocking data\n*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000002-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# blocking timeout\n*-1\\r\\n",
+      decoded: '{\n  "nonBlockingData": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]],\n    ["writers", [["1700000000001-0", ["name", "bob"]]]]\n  ],\n  "nonBlockingNoData": null,\n  "blockingData": [\n    ["mystream", [["1700000000002-0", ["name", "alice"]]]]\n  ],\n  "blockingTimeout": null\n}'
     },
     resp3: {
-      tree: "map | null\n├─ success: stream result map\n│  └─ stream name: blob string\n│     └─ entries: array\n│        └─ entry*\n│           ├─ id: blob string\n│           └─ fields: map\n│              └─ field blob string => value blob string\n├─ no data without BLOCK: null returned immediately\n└─ BLOCK timeout: null after wait expires",
-      wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# no data without BLOCK\n_\\r\\n\n# BLOCK timeout\n_\\r\\n",
-      decoded: '{\n  "success": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]]\n  },\n  "noData": null,\n  "timeout": null\n}'
+      tree: "request mode\n├─ non-blocking XREAD\n│  ├─ data available: stream result map\n│  │  └─ stream name: blob string => entries array\n│  └─ no stream can be served: null immediately\n└─ blocking XREAD\n   ├─ data already available: same schema, no wait\n   ├─ data arrives before timeout: same schema, usually only stream(s) satisfied by new data\n   ├─ timeout before data: null after wait expires\n   └─ note: client APIs may unwrap a single-stream blocked result",
+      wire: "%2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n$7\\r\\nwriters\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000001-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$3\\r\\nbob\\r\\n\n# non-blocking no data\n_\\r\\n\n# blocking data\n%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000002-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# blocking timeout\n_\\r\\n",
+      decoded: '{\n  "nonBlockingData": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]],\n    "writers": [["1700000000001-0", { "name": "bob" }]]\n  },\n  "nonBlockingNoData": null,\n  "blockingData": {\n    "mystream": [["1700000000002-0", { "name": "alice" }]]\n  },\n  "blockingTimeout": null\n}'
     }
   },
   XREADGROUP: {
     resp2: {
-      tree: "array | null array\n├─ success: stream result array\n│  └─ stream result*\n│     ├─ stream: bulk string\n│     └─ entries: array\n│        └─ entry*\n│           ├─ id: bulk string\n│           └─ fields: array\n│              ├─ field: bulk string\n│              └─ value: bulk string\n├─ no data without BLOCK: null array returned immediately\n└─ BLOCK timeout: null array after wait expires",
-      wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# no data without BLOCK\n*-1\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
-      decoded: '{\n  "success": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]]\n  ],\n  "noData": null,\n  "timeout": null\n}'
+      tree: "request mode\n├─ non-blocking XREADGROUP\n│  ├─ data available: stream result array\n│  │  └─ stream result* for each served stream\n│  │     ├─ stream: bulk string\n│  │     └─ entries: array of [id, fields]\n│  └─ no matching delivered/pending entries: null array immediately\n└─ blocking XREADGROUP\n   ├─ data already available: same schema, no wait\n   ├─ data arrives before timeout: same schema, usually only stream(s) satisfied by new data\n   ├─ timeout before data: null array after wait expires\n   └─ note: client APIs may unwrap a single-stream blocked result",
+      wire: "*2\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n*2\\r\\n$7\\r\\nwriters\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000001-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$3\\r\\nbob\\r\\n\n# non-blocking no data\n*-1\\r\\n\n# blocking data\n*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000002-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# blocking timeout\n*-1\\r\\n",
+      decoded: '{\n  "nonBlockingData": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]],\n    ["writers", [["1700000000001-0", ["name", "bob"]]]]\n  ],\n  "nonBlockingNoData": null,\n  "blockingData": [\n    ["mystream", [["1700000000002-0", ["name", "alice"]]]]\n  ],\n  "blockingTimeout": null\n}'
     },
     resp3: {
-      tree: "map | null\n├─ success: stream result map\n│  └─ stream name: blob string\n│     └─ entries: array\n│        └─ entry*\n│           ├─ id: blob string\n│           └─ fields: map\n│              └─ field blob string => value blob string\n├─ no data without BLOCK: null returned immediately\n└─ BLOCK timeout: null after wait expires",
-      wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# no data without BLOCK\n_\\r\\n\n# BLOCK timeout\n_\\r\\n",
-      decoded: '{\n  "success": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]]\n  },\n  "noData": null,\n  "timeout": null\n}'
+      tree: "request mode\n├─ non-blocking XREADGROUP\n│  ├─ data available: stream result map\n│  │  └─ stream name: blob string => entries array\n│  └─ no matching delivered/pending entries: null immediately\n└─ blocking XREADGROUP\n   ├─ data already available: same schema, no wait\n   ├─ data arrives before timeout: same schema, usually only stream(s) satisfied by new data\n   ├─ timeout before data: null after wait expires\n   └─ note: client APIs may unwrap a single-stream blocked result",
+      wire: "%2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n$7\\r\\nwriters\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000001-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$3\\r\\nbob\\r\\n\n# non-blocking no data\n_\\r\\n\n# blocking data\n%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000002-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# blocking timeout\n_\\r\\n",
+      decoded: '{\n  "nonBlockingData": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]],\n    "writers": [["1700000000001-0", { "name": "bob" }]]\n  },\n  "nonBlockingNoData": null,\n  "blockingData": {\n    "mystream": [["1700000000002-0", { "name": "alice" }]]\n  },\n  "blockingTimeout": null\n}'
     }
   },
   SUBSCRIBE: {
@@ -1156,6 +1156,10 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         let current = { name: defaultName, text: "" };
         const normalizeScenarioName = (name) => {
           const lower = name.trim().toLowerCase();
+          if (lower.includes("non-blocking") && lower.includes("no data")) return "non-blocking no data";
+          if (lower.includes("non-blocking") && lower.includes("data")) return "non-blocking data";
+          if (lower.includes("blocking") && lower.includes("timeout")) return "blocking timeout";
+          if (lower.includes("blocking") && lower.includes("data")) return "blocking data";
           if (lower.includes("timeout")) return "timeout";
           if (lower.includes("no data")) return "no data";
           if (lower.includes("missing key")) return "missing key";
@@ -1188,7 +1192,27 @@ const getErrorCases = (command: { name: string; category: string; signature: str
           if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
             const keys = Object.keys(parsed);
             const scenarioKeys = keys.filter((key) =>
-              ["success", "setOrDeleted", "missingKey", "previousValue", "previousMissing", "conditionMiss", "changed", "incrementedScore", "nomkstreamMissingStream", "noData", "timeout", "watchAbort", "empty", "nil", "null"].includes(key)
+              [
+                "success",
+                "setOrDeleted",
+                "missingKey",
+                "previousValue",
+                "previousMissing",
+                "conditionMiss",
+                "changed",
+                "incrementedScore",
+                "nomkstreamMissingStream",
+                "nonBlockingData",
+                "nonBlockingNoData",
+                "blockingData",
+                "blockingTimeout",
+                "noData",
+                "timeout",
+                "watchAbort",
+                "empty",
+                "nil",
+                "null"
+              ].includes(key)
             );
             if (scenarioKeys.length > 1) {
               return scenarioKeys.map((key) => ({ name: key.replace(/([A-Z])/g, " $1").toLowerCase(), value: parsed[key] }));
