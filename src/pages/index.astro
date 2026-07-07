@@ -327,6 +327,232 @@ const typedReplies: Record<string, { resp2: string; resp3: string }> = {
 
 const getTypedReply = (name: string, mode: "resp2" | "resp3", fallback: string) => typedReplies[name]?.[mode] ?? fallback;
 
+type ReplyInspector = {
+  tree: string;
+  wire: string;
+  decoded: string;
+};
+
+type ReplyInspectorSet = {
+  resp2: ReplyInspector;
+  resp3: ReplyInspector;
+};
+
+const simpleReply = (shape: string, summary: string, protocol: "RESP2" | "RESP3"): ReplyInspector => {
+  const wire = shape.includes("int")
+    ? ":1\\r\\n"
+    : shape.includes("null") && protocol === "RESP3"
+      ? "_\\r\\n"
+      : shape.includes("null")
+        ? "$-1\\r\\n"
+        : shape.includes("Map")
+          ? "%1\\r\\n+field\\r\\n$5\\r\\nvalue\\r\\n"
+          : shape.includes("Set")
+            ? "~2\\r\\n$3\\r\\none\\r\\n$3\\r\\ntwo\\r\\n"
+            : shape.includes("[")
+              ? "*2\\r\\n$3\\r\\none\\r\\n$3\\r\\ntwo\\r\\n"
+              : shape.includes("bulk") || shape.includes("blob")
+                ? "$5\\r\\nvalue\\r\\n"
+                : "+OK\\r\\n";
+
+  const decoded = shape.includes("int")
+    ? "1"
+    : shape.includes("null")
+      ? "null"
+      : shape.includes("Map")
+        ? '{ "field": "value" }'
+        : shape.includes("Set")
+          ? 'Set { "one", "two" }'
+          : shape.includes("[")
+            ? '["one", "two"]'
+            : shape.includes("bulk") || shape.includes("blob")
+              ? '"value"'
+              : '"OK"';
+
+  return {
+    tree: `reply\n├─ protocol: ${protocol}\n├─ shape: ${shape.replace(/\n/g, "\n│  or: ")}\n└─ meaning: ${summary}`,
+    wire,
+    decoded
+  };
+};
+
+const replyInspectors: Record<string, ReplyInspectorSet> = {
+  SCAN: {
+    resp2: {
+      tree: "array\n├─ cursor: bulk string\n└─ keys: array\n   └─ key*: bulk string",
+      wire: "*2\\r\\n$1\\r\\n0\\r\\n*2\\r\\n$5\\r\\nalpha\\r\\n$4\\r\\nbeta\\r\\n",
+      decoded: '["0", ["alpha", "beta"]]'
+    },
+    resp3: {
+      tree: "array\n├─ cursor: blob string\n└─ keys: array\n   └─ key*: blob string",
+      wire: "*2\\r\\n$1\\r\\n0\\r\\n*2\\r\\n$5\\r\\nalpha\\r\\n$4\\r\\nbeta\\r\\n",
+      decoded: '["0", ["alpha", "beta"]]'
+    }
+  },
+  HGETALL: {
+    resp2: {
+      tree: "array\n├─ field: bulk string\n├─ value: bulk string\n└─ repeated field/value pairs",
+      wire: "*4\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n$3\\r\\nage\\r\\n$2\\r\\n42\\r\\n",
+      decoded: '["name", "alice", "age", "42"]'
+    },
+    resp3: {
+      tree: "map\n└─ entry*\n   ├─ field: blob string\n   └─ value: blob string",
+      wire: "%2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n$3\\r\\nage\\r\\n$2\\r\\n42\\r\\n",
+      decoded: '{ "name": "alice", "age": "42" }'
+    }
+  },
+  HSCAN: {
+    resp2: {
+      tree: "array\n├─ cursor: bulk string\n└─ pairs: array\n   ├─ field: bulk string\n   ├─ value: bulk string\n   └─ repeated field/value pairs",
+      wire: "*2\\r\\n$1\\r\\n0\\r\\n*4\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n$3\\r\\nage\\r\\n$2\\r\\n42\\r\\n",
+      decoded: '["0", ["name", "alice", "age", "42"]]'
+    },
+    resp3: {
+      tree: "array\n├─ cursor: blob string\n└─ pairs: array\n   ├─ field: blob string\n   ├─ value: blob string\n   └─ repeated field/value pairs",
+      wire: "*2\\r\\n$1\\r\\n0\\r\\n*4\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n$3\\r\\nage\\r\\n$2\\r\\n42\\r\\n",
+      decoded: '["0", ["name", "alice", "age", "42"]]'
+    }
+  },
+  BLPOP: {
+    resp2: {
+      tree: "array | null array\n├─ key: bulk string\n└─ element: bulk string\n\non timeout\n└─ null array",
+      wire: "*2\\r\\n$5\\r\\nqueue\\r\\n$3\\r\\njob\\r\\n\n# timeout\n*-1\\r\\n",
+      decoded: '["queue", "job"]\n// timeout: null'
+    },
+    resp3: {
+      tree: "array | null\n├─ key: blob string\n└─ element: blob string\n\non timeout\n└─ null",
+      wire: "*2\\r\\n$5\\r\\nqueue\\r\\n$3\\r\\njob\\r\\n\n# timeout\n_\\r\\n",
+      decoded: '["queue", "job"]\n// timeout: null'
+    }
+  },
+  BRPOP: {
+    resp2: {
+      tree: "array | null array\n├─ key: bulk string\n└─ element: bulk string\n\non timeout\n└─ null array",
+      wire: "*2\\r\\n$5\\r\\nqueue\\r\\n$3\\r\\njob\\r\\n\n# timeout\n*-1\\r\\n",
+      decoded: '["queue", "job"]\n// timeout: null'
+    },
+    resp3: {
+      tree: "array | null\n├─ key: blob string\n└─ element: blob string\n\non timeout\n└─ null",
+      wire: "*2\\r\\n$5\\r\\nqueue\\r\\n$3\\r\\njob\\r\\n\n# timeout\n_\\r\\n",
+      decoded: '["queue", "job"]\n// timeout: null'
+    }
+  },
+  ZRANGE: {
+    resp2: {
+      tree: "array\n├─ member*: bulk string\n└─ WITHSCORES: alternating member bulk string, score bulk string",
+      wire: "*4\\r\\n$5\\r\\nalice\\r\\n$4\\r\\n10.5\\r\\n$3\\r\\nbob\\r\\n$1\\r\\n8\\r\\n",
+      decoded: '["alice", "10.5", "bob", "8"]'
+    },
+    resp3: {
+      tree: "array\n├─ member*: blob string\n└─ WITHSCORES: alternating member blob string, score blob string",
+      wire: "*4\\r\\n$5\\r\\nalice\\r\\n$4\\r\\n10.5\\r\\n$3\\r\\nbob\\r\\n$1\\r\\n8\\r\\n",
+      decoded: '["alice", "10.5", "bob", "8"]'
+    }
+  },
+  ZSCAN: {
+    resp2: {
+      tree: "array\n├─ cursor: bulk string\n└─ pairs: array\n   ├─ member: bulk string\n   ├─ score: bulk string\n   └─ repeated member/score pairs",
+      wire: "*2\\r\\n$1\\r\\n0\\r\\n*4\\r\\n$5\\r\\nalice\\r\\n$4\\r\\n10.5\\r\\n$3\\r\\nbob\\r\\n$1\\r\\n8\\r\\n",
+      decoded: '["0", ["alice", "10.5", "bob", "8"]]'
+    },
+    resp3: {
+      tree: "array\n├─ cursor: blob string\n└─ pairs: array\n   ├─ member: blob string\n   ├─ score: blob string\n   └─ repeated member/score pairs",
+      wire: "*2\\r\\n$1\\r\\n0\\r\\n*4\\r\\n$5\\r\\nalice\\r\\n$4\\r\\n10.5\\r\\n$3\\r\\nbob\\r\\n$1\\r\\n8\\r\\n",
+      decoded: '["0", ["alice", "10.5", "bob", "8"]]'
+    }
+  },
+  XRANGE: {
+    resp2: {
+      tree: "array\n└─ entry*\n   ├─ id: bulk string\n   └─ fields: array\n      ├─ field: bulk string\n      ├─ value: bulk string\n      └─ repeated field/value pairs",
+      wire: "*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*4\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n$3\\r\\nage\\r\\n$2\\r\\n42\\r\\n",
+      decoded: '[["1700000000000-0", ["name", "alice", "age", "42"]]]'
+    },
+    resp3: {
+      tree: "array\n└─ entry*\n   ├─ id: blob string\n   └─ fields: map\n      └─ field blob string => value blob string",
+      wire: "*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n$3\\r\\nage\\r\\n$2\\r\\n42\\r\\n",
+      decoded: '[["1700000000000-0", { "name": "alice", "age": "42" }]]'
+    }
+  },
+  XREAD: {
+    resp2: {
+      tree: "array | null array\n└─ stream result*\n   ├─ stream: bulk string\n   └─ entries: array\n      └─ entry*\n         ├─ id: bulk string\n         └─ fields: array\n            ├─ field: bulk string\n            └─ value: bulk string",
+      wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
+      decoded: '[["mystream", [["1700000000000-0", ["name", "alice"]]]]]\n// timeout: null'
+    },
+    resp3: {
+      tree: "map | null\n└─ stream name: blob string\n   └─ entries: array\n      └─ entry*\n         ├─ id: blob string\n         └─ fields: map\n            └─ field blob string => value blob string",
+      wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n_\\r\\n",
+      decoded: '{ "mystream": [["1700000000000-0", { "name": "alice" }]] }\n// timeout: null'
+    }
+  },
+  XREADGROUP: {
+    resp2: {
+      tree: "array | null array\n└─ stream result*\n   ├─ stream: bulk string\n   └─ entries: array\n      └─ entry*\n         ├─ id: bulk string\n         └─ fields: array\n            ├─ field: bulk string\n            └─ value: bulk string",
+      wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
+      decoded: '[["mystream", [["1700000000000-0", ["name", "alice"]]]]]\n// timeout: null'
+    },
+    resp3: {
+      tree: "map | null\n└─ stream name: blob string\n   └─ entries: array\n      └─ entry*\n         ├─ id: blob string\n         └─ fields: map\n            └─ field blob string => value blob string",
+      wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n_\\r\\n",
+      decoded: '{ "mystream": [["1700000000000-0", { "name": "alice" }]] }\n// timeout: null'
+    }
+  },
+  SUBSCRIBE: {
+    resp2: {
+      tree: "array push-like message\n├─ kind: bulk string subscribe | message\n├─ channel: bulk string\n└─ count or payload: integer | bulk string",
+      wire: "*3\\r\\n$9\\r\\nsubscribe\\r\\n$4\\r\\nnews\\r\\n:1\\r\\n\n*3\\r\\n$7\\r\\nmessage\\r\\n$4\\r\\nnews\\r\\n$5\\r\\nhello\\r\\n",
+      decoded: '["subscribe", "news", 1]\n["message", "news", "hello"]'
+    },
+    resp3: {
+      tree: "push\n├─ kind: blob string subscribe | message\n├─ channel: blob string\n└─ count or payload: integer | blob string",
+      wire: ">3\\r\\n$9\\r\\nsubscribe\\r\\n$4\\r\\nnews\\r\\n:1\\r\\n\n>3\\r\\n$7\\r\\nmessage\\r\\n$4\\r\\nnews\\r\\n$5\\r\\nhello\\r\\n",
+      decoded: 'push("subscribe", "news", 1)\npush("message", "news", "hello")'
+    }
+  },
+  PSUBSCRIBE: {
+    resp2: {
+      tree: "array push-like message\n├─ kind: bulk string psubscribe | pmessage\n├─ pattern: bulk string\n├─ channel: bulk string when pmessage\n└─ count or payload: integer | bulk string",
+      wire: "*3\\r\\n$10\\r\\npsubscribe\\r\\n$6\\r\\nnews.*\\r\\n:1\\r\\n\n*4\\r\\n$8\\r\\npmessage\\r\\n$6\\r\\nnews.*\\r\\n$9\\r\\nnews.east\\r\\n$5\\r\\nhello\\r\\n",
+      decoded: '["psubscribe", "news.*", 1]\n["pmessage", "news.*", "news.east", "hello"]'
+    },
+    resp3: {
+      tree: "push\n├─ kind: blob string psubscribe | pmessage\n├─ pattern: blob string\n├─ channel: blob string when pmessage\n└─ count or payload: integer | blob string",
+      wire: ">3\\r\\n$10\\r\\npsubscribe\\r\\n$6\\r\\nnews.*\\r\\n:1\\r\\n\n>4\\r\\n$8\\r\\npmessage\\r\\n$6\\r\\nnews.*\\r\\n$9\\r\\nnews.east\\r\\n$5\\r\\nhello\\r\\n",
+      decoded: 'push("psubscribe", "news.*", 1)\npush("pmessage", "news.*", "news.east", "hello")'
+    }
+  },
+  EXEC: {
+    resp2: {
+      tree: "array | null array\n├─ reply[0]: nested reply from queued command\n├─ reply[1]: nested reply from queued command\n└─ null array when WATCH aborts",
+      wire: "*2\\r\\n+OK\\r\\n:2\\r\\n\n# WATCH abort\n*-1\\r\\n",
+      decoded: '["OK", 2]\n// watch abort: null'
+    },
+    resp3: {
+      tree: "array | null\n├─ reply[0]: nested reply from queued command\n├─ reply[1]: nested reply from queued command\n└─ null when WATCH aborts",
+      wire: "*2\\r\\n+OK\\r\\n:2\\r\\n\n# WATCH abort\n_\\r\\n",
+      decoded: '["OK", 2]\n// watch abort: null'
+    }
+  },
+  "CLUSTER SLOTS": {
+    resp2: {
+      tree: "array\n└─ slot range*\n   ├─ start slot: integer\n   ├─ end slot: integer\n   ├─ master: array [host bulk, port int, node id bulk, ...]\n   └─ replica*: array [host bulk, port int, node id bulk, ...]",
+      wire: "*1\\r\\n*3\\r\\n:0\\r\\n:5460\\r\\n*3\\r\\n$9\\r\\n127.0.0.1\\r\\n:7000\\r\\n$40\\r\\n07c37dfeb2352e0b6f0...\\r\\n",
+      decoded: '[[0, 5460, ["127.0.0.1", 7000, "07c37d..."]]]'
+    },
+    resp3: {
+      tree: "array or map-like aggregate\n└─ slot range*\n   ├─ start slot: integer\n   ├─ end slot: integer\n   └─ node endpoint metadata",
+      wire: "*1\\r\\n*3\\r\\n:0\\r\\n:5460\\r\\n*3\\r\\n$9\\r\\n127.0.0.1\\r\\n:7000\\r\\n$40\\r\\n07c37dfeb2352e0b6f0...\\r\\n",
+      decoded: '[[0, 5460, ["127.0.0.1", 7000, "07c37d..."]]]'
+    }
+  }
+};
+
+const getReplyInspector = (name: string, resp2Shape: string, resp3Shape: string, resp2Summary: string, resp3Summary: string): ReplyInspectorSet =>
+  replyInspectors[name] ?? {
+    resp2: simpleReply(resp2Shape, resp2Summary, "RESP2"),
+    resp3: simpleReply(resp3Shape, resp3Summary, "RESP3")
+  };
+
 const keyspaceCommands = new Set([
   "EXISTS",
   "DEL",
@@ -623,6 +849,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                   .map((command) => {
                     const resp2Shape = getTypedReply(command.name, "resp2", command.resp2);
                     const resp3Shape = getTypedReply(command.name, "resp3", command.resp3);
+                    const replyInspector = getReplyInspector(command.name, resp2Shape, resp3Shape, command.resp2, command.resp3);
                     const errorCases = getErrorCases(command);
                     return (
                     <article
@@ -664,6 +891,23 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                           <div class="reply-panel">
                             <pre class="reply-code" data-resp2-shape={resp2Shape} data-resp3-shape={resp3Shape}>{resp2Shape}</pre>
                             <p class="reply-summary" data-resp2-note={command.resp2} data-resp3-note={command.resp3}>{command.resp2}</p>
+                            <div class="reply-inspector" data-reply-inspector>
+                              <div class="inspector-tabs" role="tablist" aria-label={`${command.name} reply views`}>
+                                <button class="active" type="button" data-inspector-tab="tree">Tree</button>
+                                <button type="button" data-inspector-tab="wire">Wire</button>
+                                <button type="button" data-inspector-tab="decoded">Decoded</button>
+                              </div>
+                              <pre
+                                class="inspector-output"
+                                data-active-view="tree"
+                                data-resp2-tree={replyInspector.resp2.tree}
+                                data-resp2-wire={replyInspector.resp2.wire}
+                                data-resp2-decoded={replyInspector.resp2.decoded}
+                                data-resp3-tree={replyInspector.resp3.tree}
+                                data-resp3-wire={replyInspector.resp3.wire}
+                                data-resp3-decoded={replyInspector.resp3.decoded}
+                              >{replyInspector.resp2.tree}</pre>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -705,8 +949,15 @@ const getErrorCases = (command: { name: string; category: string; signature: str
       const cards = Array.from(document.querySelectorAll("[data-command-card]"));
       const sections = Array.from(document.querySelectorAll("[data-section]"));
       let selectedTag = "all";
+      let currentMode = "resp2";
+
+      function updateInspectorOutput(output) {
+        const view = output.dataset.activeView || "tree";
+        output.textContent = output.dataset[`${currentMode}${view[0].toUpperCase()}${view.slice(1)}`] || "";
+      }
 
       function updateMode(mode) {
+        currentMode = mode;
         const label = mode.toUpperCase();
         modeLabels.forEach((node) => {
           node.textContent = label;
@@ -717,6 +968,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         document.querySelectorAll("[data-resp2-note]").forEach((node) => {
           node.textContent = node.dataset[`${mode}Note`] || "";
         });
+        document.querySelectorAll("[data-active-view]").forEach(updateInspectorOutput);
         document.documentElement.dataset.respMode = mode;
       }
 
@@ -752,6 +1004,19 @@ const getErrorCases = (command: { name: string; category: string; signature: str
           selectedTag = button.dataset.tag;
           tagButtons.forEach((tag) => tag.classList.toggle("active", tag === button));
           applyFilters();
+        });
+      });
+
+      document.querySelectorAll("[data-reply-inspector]").forEach((inspector) => {
+        const output = inspector.querySelector("[data-active-view]");
+        inspector.querySelectorAll("[data-inspector-tab]").forEach((button) => {
+          button.addEventListener("click", () => {
+            output.dataset.activeView = button.dataset.inspectorTab;
+            inspector.querySelectorAll("[data-inspector-tab]").forEach((tab) => {
+              tab.classList.toggle("active", tab === button);
+            });
+            updateInspectorOutput(output);
+          });
         });
       });
 
