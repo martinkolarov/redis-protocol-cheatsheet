@@ -763,14 +763,18 @@ export const commands: Command[] = [
 export const categories = Array.from(new Set(commands.map((command) => command.category)));
 
 export const concernFilters = [
-  { label: "nil / null", tag: "nil" },
-  { label: "errors", tag: "error" },
-  { label: "blocking", tag: "blocking" },
-  { label: "push", tag: "push" },
-  { label: "cursor", tag: "cursor" },
-  { label: "expiry", tag: "ttl" },
-  { label: "transactions", tag: "transaction" },
-  { label: "cluster", tag: "cluster" },
+  { label: "connections", tag: "connection" },
   { label: "auth", tag: "auth" },
-  { label: "scripting", tag: "scripting" }
+  { label: "keys", tag: "keys" },
+  { label: "strings", tag: "string" },
+  { label: "hashes", tag: "hash" },
+  { label: "lists", tag: "list" },
+  { label: "sets", tag: "set" },
+  { label: "sorted sets", tag: "zset" },
+  { label: "streams", tag: "stream" },
+  { label: "pub/sub", tag: "pubsub" },
+  { label: "transactions", tag: "transaction" },
+  { label: "scripting", tag: "scripting" },
+  { label: "cluster", tag: "cluster" },
+  { label: "replication", tag: "replica" }
 ];
