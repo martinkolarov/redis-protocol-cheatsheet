@@ -5,6 +5,8 @@ import "../styles/global.css";
 const categoryIds = new Map(categories.map((category) => [category, category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")]));
 const buildId = import.meta.env.PUBLIC_BUILD_ID ?? "local";
 const shortBuildId = buildId === "local" ? buildId : buildId.slice(0, 7);
+const baseUrl = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
+const versionUrl = `${baseUrl}version.json`;
 
 const typedReplies: Record<string, { resp2: string; resp3: string }> = {
   PING: {
@@ -724,7 +726,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
     <meta http-equiv="expires" content="0" />
     <title>Redis Protocol Cheat Sheet</title>
   </head>
-  <body>
+  <body data-build-id={buildId} data-version-url={versionUrl}>
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
@@ -948,6 +950,8 @@ const getErrorCases = (command: { name: string; category: string; signature: str
       const tagButtons = document.querySelectorAll("[data-tag]");
       const cards = Array.from(document.querySelectorAll("[data-command-card]"));
       const sections = Array.from(document.querySelectorAll("[data-section]"));
+      const pageBuildId = document.body.dataset.buildId;
+      const versionUrl = document.body.dataset.versionUrl;
       let selectedTag = "all";
       let currentMode = "resp2";
 
@@ -1022,8 +1026,34 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
       searchInput.addEventListener("input", applyFilters);
       categoryFilter.addEventListener("change", applyFilters);
+
+      async function refreshIfStaleBuild() {
+        if (!pageBuildId || pageBuildId === "local" || !versionUrl) return;
+
+        try {
+          const url = new URL(versionUrl, window.location.origin);
+          url.searchParams.set("_", String(Date.now()));
+          const response = await fetch(url, { cache: "no-store" });
+          if (!response.ok) return;
+
+          const latest = await response.json();
+          if (!latest.buildId || latest.buildId === pageBuildId) return;
+
+          const reloadKey = `redis-cheatsheet-reloaded-${latest.buildId}`;
+          if (sessionStorage.getItem(reloadKey)) return;
+
+          sessionStorage.setItem(reloadKey, "1");
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set("_v", latest.buildId);
+          window.location.replace(nextUrl);
+        } catch {
+          // Cache refresh is best-effort; the reference remains usable if it fails.
+        }
+      }
+
       updateMode("resp2");
       applyFilters();
+      refreshIfStaleBuild();
     </script>
   </body>
 </html>
