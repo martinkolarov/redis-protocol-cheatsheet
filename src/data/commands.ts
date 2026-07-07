@@ -764,6 +764,7 @@ export const categories = Array.from(new Set(commands.map((command) => command.c
 
 export const concernFilters = [
   { label: "connections", tag: "connection" },
+  { label: "server", tag: "server" },
   { label: "auth", tag: "auth" },
   { label: "keys", tag: "keys" },
   { label: "strings", tag: "string" },

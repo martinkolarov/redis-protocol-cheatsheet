@@ -766,6 +766,8 @@ const hasNumericArgs = (command: { signature: string; params: string[] }) => {
   return numericArgNames.some((name) => new RegExp(`\\b${name}\\b`).test(text));
 };
 
+const getThemeTags = (tags: string[]) => concernFilters.filter((filter) => tags.includes(filter.tag)).map((filter) => filter.label);
+
 const getErrorCases = (command: { name: string; category: string; signature: string; params: string[]; tags: string[] }) => {
   const cases = ["Bad arity or malformed options -> -ERR wrong number of arguments or -ERR syntax error."];
 
@@ -929,6 +931,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                     const resp3Shape = getTypedReply(command.name, "resp3", command.resp3);
                     const replyInspector = getReplyInspector(command.name, resp2Shape, resp3Shape, command.resp2, command.resp3);
                     const errorCases = getErrorCases(command);
+                    const themeTags = getThemeTags(command.tags);
                     return (
                     <article
                       class="command-card"
@@ -944,7 +947,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                           <h3>{command.name}</h3>
                         </div>
                         <div class="tag-bits">
-                          {command.tags.slice(0, 3).map((tag) => (
+                          {themeTags.slice(0, 3).map((tag) => (
                             <span>{tag}</span>
                           ))}
                         </div>
