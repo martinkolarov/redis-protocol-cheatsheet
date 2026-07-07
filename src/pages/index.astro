@@ -1298,10 +1298,10 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         }
       }
 
-      function renderValueNode(value, label = "value") {
+      function renderValueNode(value, label = "") {
         if (Array.isArray(value)) {
           return renderNestedNode({
-            label: `${label}: array(${value.length})`,
+            label: label ? `${label}: array(${value.length})` : `array(${value.length})`,
             type: "array",
             open: true,
             children: value.map((item, index) => ({ label: `[${index}]`, type: inferBadge(String(item)), children: [valueNodeShape(item)] }))
@@ -1310,7 +1310,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
         if (value && typeof value === "object") {
           return renderNestedNode({
-            label: `${label}: object`,
+            label: label ? `${label}: object` : "object",
             type: "map",
             open: true,
             children: Object.entries(value).map(([key, item]) => ({ label: key, type: inferBadge(String(item)), children: [valueNodeShape(item)] }))
@@ -1320,22 +1320,22 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         return renderNestedNode(valueNodeShape(value, label));
       }
 
-      function valueNodeShape(value, label = "value") {
+      function valueNodeShape(value, label = "") {
         if (Array.isArray(value)) {
           return {
-            label: `${label}: array(${value.length})`,
+            label: label ? `${label}: array(${value.length})` : `array(${value.length})`,
             type: "array",
             children: value.map((item, index) => valueNodeShape(item, `[${index}]`))
           };
         }
         if (value && typeof value === "object") {
           return {
-            label: `${label}: object`,
+            label: label ? `${label}: object` : "object",
             type: "map",
             children: Object.entries(value).map(([key, item]) => valueNodeShape(item, key))
           };
         }
-        return { label: `${label}: ${value === null ? "null" : JSON.stringify(value)}`, type: value === null ? "null" : typeof value };
+        return { label: label ? `${label}: ${value === null ? "null" : JSON.stringify(value)}` : value === null ? "null" : JSON.stringify(value), type: value === null ? "null" : typeof value };
       }
 
       function getInspectorPayload(output) {
@@ -1413,7 +1413,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
       function renderValueView(output, scenario) {
         if (!scenario) return;
-        output.append(renderValueNode(scenario.value, scenario.label.toLowerCase()));
+        output.append(renderValueNode(scenario.value));
       }
 
       function updateInspectorOutput(output) {
