@@ -974,7 +974,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                           <div class="reply-panel">
                             <div class="reply-inspector" data-reply-inspector data-command-name={command.name}>
                               <div class="inspector-tabs" role="tablist" aria-label={`${command.name} reply views`}>
-                                <button class="active" type="button" data-inspector-tab="tree">Tree</button>
+                                <button class="active" type="button" data-inspector-tab="shape">Shape</button>
                                 <button type="button" data-inspector-tab="wire">Wire</button>
                               </div>
                               <div class="inspector-toolbar">
@@ -990,7 +990,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                               </div>
                               <div
                                 class="inspector-output"
-                                data-active-view="tree"
+                                data-active-view="shape"
                                 data-active-outcome="success"
                                 data-resp2-tree={replyInspector.resp2.tree}
                                 data-resp2-wire={replyInspector.resp2.wire}
@@ -1120,7 +1120,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         return details;
       }
 
-      function parseTreeLines(text) {
+      function parseShapeLines(text) {
         const root = { label: "reply", type: "reply", open: true, children: [] };
         const stack = [{ indent: -1, node: root }];
 
@@ -1390,7 +1390,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         const modePrefix = currentMode;
         const wire = output.dataset[`${modePrefix}Wire`] || "";
         const decoded = output.dataset[`${modePrefix}Decoded`] || "";
-        const tree = output.dataset[`${modePrefix}Tree`] || "";
+        const shape = output.dataset[`${modePrefix}Tree`] || "";
         let wireOutcomes = splitScenarioText(wire);
         const valueOutcomes = parseValueScenarios(decoded);
         if (
@@ -1413,7 +1413,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
           byId.set("success", { id: "success", label: "Success" });
         }
 
-        return { tree, outcomes: Array.from(byId.values()), wireOutcomes, valueOutcomes };
+        return { shape, outcomes: Array.from(byId.values()), wireOutcomes, valueOutcomes };
       }
 
       function syncOutcomePicker(inspector, output, outcomes) {
@@ -1436,12 +1436,12 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         picker.hidden = outcomes.length <= 1;
       }
 
-      function renderTreeView(output, text, outcome, valueScenario, wireScenario, hasMultipleOutcomes) {
+      function renderShapeView(output, text, outcome, valueScenario, wireScenario, hasMultipleOutcomes) {
         if (outcome && valueScenario && hasMultipleOutcomes) {
           output.append(renderNestedNode(valueNodeShape(valueScenario.value, "", scalarTypesFromWire(wireScenario?.text || "", currentMode))));
           return;
         }
-        output.append(renderNestedNode(parseTreeLines(text)));
+        output.append(renderNestedNode(parseShapeLines(text)));
       }
 
       function renderWireView(inspector, output, scenario) {
@@ -1461,7 +1461,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
       function updateInspectorOutput(output) {
         const inspector = output.closest("[data-reply-inspector]");
-        const view = output.dataset.activeView || "tree";
+        const view = output.dataset.activeView || "shape";
         const payload = getInspectorPayload(output);
         syncOutcomePicker(inspector, output, payload.outcomes);
         const activeOutcome = output.dataset.activeOutcome;
@@ -1471,7 +1471,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         clearNode(output);
         inspector.querySelector("[data-raw-toggle]").hidden = view !== "wire";
 
-        if (view === "tree") renderTreeView(output, payload.tree, active, activeValue, activeWire, payload.outcomes.length > 1);
+        if (view === "shape") renderShapeView(output, payload.shape, active, activeValue, activeWire, payload.outcomes.length > 1);
         if (view === "wire") renderWireView(inspector, output, activeWire);
       }
 
