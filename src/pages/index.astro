@@ -824,6 +824,17 @@ const getErrorCases = (command: { name: string; category: string; signature: str
             <span>coverage</span>
             <strong>{commands.length} core commands</strong>
           </div>
+          <fieldset class="toggle-wrap status-toggle" aria-label="RESP version">
+            <legend>Protocol</legend>
+            <label class="segmented">
+              <input type="radio" name="resp-mode" value="resp2" checked />
+              <span>RESP2</span>
+            </label>
+            <label class="segmented">
+              <input type="radio" name="resp-mode" value="resp3" />
+              <span>RESP3</span>
+            </label>
+          </fieldset>
           <div class="status-row">
             <span>mode</span>
             <strong data-mode-label>RESP2</strong>
@@ -889,18 +900,6 @@ const getErrorCases = (command: { name: string; category: string; signature: str
             <label for="command-search">Search</label>
             <input id="command-search" type="search" placeholder="GET, stream, nil, blocking..." autocomplete="off" />
           </div>
-
-          <fieldset class="toggle-wrap" aria-label="RESP version">
-            <legend>Protocol</legend>
-            <label class="segmented">
-              <input type="radio" name="resp-mode" value="resp2" checked />
-              <span>RESP2</span>
-            </label>
-            <label class="segmented">
-              <input type="radio" name="resp-mode" value="resp3" />
-              <span>RESP3</span>
-            </label>
-          </fieldset>
 
           <div class="select-wrap">
             <label for="category-filter">Category</label>

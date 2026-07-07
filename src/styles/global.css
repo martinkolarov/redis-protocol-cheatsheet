@@ -159,7 +159,7 @@ h1 {
   top: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto minmax(210px, 280px);
+  grid-template-columns: minmax(220px, 1fr) minmax(210px, 280px);
   gap: 14px;
   align-items: end;
   padding: 14px;
@@ -206,6 +206,21 @@ h1 {
 .toggle-wrap legend {
   grid-column: 1 / -1;
   margin-bottom: 8px;
+}
+
+.status-toggle {
+  padding: 18px;
+  border-bottom: 1px solid rgba(220, 56, 45, 0.22);
+}
+
+.status-toggle legend {
+  color: var(--dim);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.status-toggle .segmented span {
+  min-width: 0;
+  height: 38px;
 }
 
 .segmented {
