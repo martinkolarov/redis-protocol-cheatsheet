@@ -340,7 +340,7 @@ type ReplyInspectorSet = {
   resp3: ReplyInspector;
 };
 
-const simpleReply = (shape: string, summary: string, protocol: "RESP2" | "RESP3"): ReplyInspector => {
+const simpleReply = (shape: string, _summary: string, protocol: "RESP2" | "RESP3"): ReplyInspector => {
   const wire = shape.includes("int")
     ? ":1\\r\\n"
     : shape.includes("null") && protocol === "RESP3"
@@ -371,8 +371,24 @@ const simpleReply = (shape: string, summary: string, protocol: "RESP2" | "RESP3"
               ? '"value"'
               : '"OK"';
 
+  const tree = shape.includes("int")
+    ? "integer\n└─ value: 1"
+    : shape.includes("null")
+      ? "null"
+      : shape.includes("Map")
+        ? "map\n└─ field: string\n   └─ value: string"
+        : shape.includes("Set")
+          ? "set\n└─ member*: string"
+          : shape.includes("[")
+            ? "array\n└─ element*: string"
+            : shape.includes("bulk")
+              ? "bulk string\n└─ bytes: value"
+              : shape.includes("blob")
+                ? "blob string\n└─ bytes: value"
+                : "simple string\n└─ value: OK";
+
   return {
-    tree: `reply\n├─ protocol: ${protocol}\n├─ shape: ${shape.replace(/\n/g, "\n│  or: ")}\n└─ meaning: ${summary}`,
+    tree,
     wire,
     decoded
   };
@@ -1149,8 +1165,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
         return frames.map((line) => ({
           label: line,
-          type: getWireKind(line),
-          description: line.startsWith("#") ? "scenario marker" : undefined
+          type: getWireKind(line)
         }));
       }
 
@@ -1375,13 +1390,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
       function renderTreeView(output, text, outcome, valueScenario, hasMultipleOutcomes) {
         if (outcome && valueScenario && hasMultipleOutcomes) {
-          const children = valueScenario ? [valueNodeShape(valueScenario.value, outcome.label.toLowerCase())] : [parseTreeLines(text)];
-          output.append(renderNestedNode({
-            label: `selected outcome: ${outcome.label}`,
-            type: inferBadge(outcome.id),
-            open: true,
-            children
-          }));
+          output.append(renderNestedNode(valueNodeShape(valueScenario.value)));
           return;
         }
         output.append(renderNestedNode(parseTreeLines(text)));
