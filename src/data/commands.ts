@@ -489,7 +489,7 @@ export const commands: Command[] = [
     params: ["start/stop: index, score, or lex bounds depending on mode.", "WITHSCORES: include score after each member."],
     resp2: "Array of bulk-string members, or flat array of bulk-string member/score pairs with WITHSCORES.",
     resp3: "Array of blob-string members, or flat array of blob-string member/score pairs with WITHSCORES.",
-    notes: ["WITHSCORES returns scores as strings; clients usually parse to double by choice."],
+    notes: ["WITHSCORES returns scores as strings; clients may parse them as doubles if they need numeric comparison."],
     tags: ["zset", "array"]
   },
   {
@@ -565,9 +565,9 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XREAD [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] id [id ...]",
     params: ["STREAMS: keys followed by matching last-seen IDs.", "BLOCK: optional blocking wait."],
-    resp2: "Success is a stream result array; after a blocked wait it often contains only the stream/entry that satisfied the wait. Null array means no stream can be served immediately without BLOCK, or BLOCK timed out.",
-    resp3: "Success is a stream result map; after a blocked wait it often contains only the stream/entry that satisfied the wait. Null _ means no stream can be served immediately without BLOCK, or BLOCK timed out.",
-    notes: ["With BLOCK, Redis returns synchronously if data is already available. If it waits, the success reply keeps the same schema but commonly has a much smaller payload. BLOCK 0 waits indefinitely."],
+    resp2: "Success is a stream result array. With BLOCK, Redis waits until entries can be served, then returns the same stream result shape. Null array means no stream can be served immediately without BLOCK, or BLOCK timed out.",
+    resp3: "Success is a stream result map. With BLOCK, Redis waits until entries can be served, then returns the same stream result shape. Null _ means no stream can be served immediately without BLOCK, or BLOCK timed out.",
+    notes: ["With BLOCK, Redis returns synchronously if data is already available. If it waits, the success reply keeps the same schema and contains the entries Redis serves when the wait completes. BLOCK 0 waits indefinitely."],
     tags: ["stream", "blocking", "array", "map", "nil"]
   },
   {
@@ -575,7 +575,7 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XGROUP subcommand key group [arg ...]",
     params: ["subcommand: CREATE, SETID, DESTROY, CREATECONSUMER, DELCONSUMER, etc."],
-    ...same("Usually simple string OK or integer count, depending on subcommand."),
+    ...same("Simple string OK or integer count, depending on subcommand."),
     notes: ["CREATE with MKSTREAM can create an empty stream. Duplicate group is BUSYGROUP error."],
     tags: ["stream", "group", "integer"]
   },
@@ -584,9 +584,9 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XREADGROUP GROUP group consumer [COUNT count] [BLOCK ms] [NOACK] STREAMS key [key ...] id [id ...]",
     params: ["group/consumer: consumer group identity.", "id: > for new messages or explicit pending IDs."],
-    resp2: "Success is a stream result array; after a blocked wait it often contains only the stream/entry that satisfied the wait. Null array means no entries can be served immediately without BLOCK, or BLOCK timed out.",
-    resp3: "Success is a stream result map; after a blocked wait it often contains only the stream/entry that satisfied the wait. Null _ means no entries can be served immediately without BLOCK, or BLOCK timed out.",
-    notes: ["Using > reads never-delivered entries. With BLOCK, Redis returns synchronously if data is already available; after waiting, the success reply keeps the same schema but commonly has a smaller payload."],
+    resp2: "Success is a stream result array. With BLOCK, Redis waits until entries can be served, then returns the same stream result shape. Null array means no entries can be served immediately without BLOCK, or BLOCK timed out.",
+    resp3: "Success is a stream result map. With BLOCK, Redis waits until entries can be served, then returns the same stream result shape. Null _ means no entries can be served immediately without BLOCK, or BLOCK timed out.",
+    notes: ["Using > reads never-delivered entries. With BLOCK, Redis returns synchronously if data is already available. If it waits, the success reply keeps the same schema and contains the entries Redis serves when the wait completes."],
     tags: ["stream", "blocking", "group", "map", "nil"]
   },
   {
@@ -700,7 +700,7 @@ export const commands: Command[] = [
     params: ["sha1: cached script digest.", "numkeys/key/arg: same as EVAL."],
     resp2: "Same as EVAL, or NOSCRIPT error when digest is unknown.",
     resp3: "Same as EVAL, or NOSCRIPT error when digest is unknown.",
-    notes: ["Clients commonly fall back to EVAL after NOSCRIPT."],
+    notes: ["After NOSCRIPT, clients can retry with EVAL or reload the script with SCRIPT LOAD."],
     tags: ["scripting", "error"]
   },
   {
