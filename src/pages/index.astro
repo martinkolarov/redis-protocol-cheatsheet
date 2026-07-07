@@ -8,6 +8,36 @@ const shortBuildId = buildId === "local" ? buildId : buildId.slice(0, 7);
 const baseUrl = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
 const versionUrl = `${baseUrl}version.json`;
 
+const respWireTypes = {
+  resp2: [
+    { type: "simple", prefix: "+", wire: "+OK\\r\\n", note: "Short non-binary string; no CR or LF inside payload." },
+    { type: "error", prefix: "-", wire: "-ERR message\\r\\n", note: "Error reply; classify Redis errors by the prefix before the first space." },
+    { type: "int", prefix: ":", wire: ":1000\\r\\n", note: "Signed decimal integer terminated by CRLF." },
+    { type: "bulk", prefix: "$", wire: "$5\\r\\nhello\\r\\n", note: "Length-prefixed binary string; length is bytes, not characters." },
+    { type: "null-bulk", prefix: "$-1", wire: "$-1\\r\\n", note: "RESP2 null for missing bulk-string values." },
+    { type: "array", prefix: "*", wire: "*2\\r\\n$3\\r\\none\\r\\n$3\\r\\ntwo\\r\\n", note: "Count followed by that many nested RESP values." },
+    { type: "null-array", prefix: "*-1", wire: "*-1\\r\\n", note: "RESP2 null for aggregate outcomes such as blocking pop timeout." }
+  ],
+  resp3: [
+    { type: "simple", prefix: "+", wire: "+OK\\r\\n", note: "Short non-binary string; still available in RESP3." },
+    { type: "error", prefix: "-", wire: "-ERR message\\r\\n", note: "Simple error; same prefix convention as RESP2." },
+    { type: "int", prefix: ":", wire: ":1000\\r\\n", note: "Signed decimal integer." },
+    { type: "blob", prefix: "$", wire: "$5\\r\\nhello\\r\\n", note: "RESP3 name for length-prefixed binary strings." },
+    { type: "null", prefix: "_", wire: "_\\r\\n", note: "Dedicated null type; replaces RESP2 null bulk/array ambiguity." },
+    { type: "bool", prefix: "#", wire: "#t\\r\\n", note: "#t for true, #f for false." },
+    { type: "double", prefix: ",", wire: ",1.23\\r\\n", note: "Floating-point value; also supports inf, -inf, and nan." },
+    { type: "big-number", prefix: "(", wire: "(3492890328409238509324850943850943825024385\\r\\n", note: "Integer outside signed 64-bit range." },
+    { type: "blob-error", prefix: "!", wire: "!20\\r\\nSYNTAX invalid token\\r\\n", note: "Length-prefixed error payload." },
+    { type: "verbatim", prefix: "=", wire: "=15\\r\\ntxt:Some string\\r\\n", note: "Length-prefixed string with a 3-byte format tag and colon." },
+    { type: "array", prefix: "*", wire: "*2\\r\\n+one\\r\\n+two\\r\\n", note: "Ordered aggregate of nested RESP values." },
+    { type: "map", prefix: "%", wire: "%1\\r\\n+field\\r\\n+value\\r\\n", note: "Key/value aggregate; count is number of pairs." },
+    { type: "attribute", prefix: "|", wire: "|1\\r\\n+ttl\\r\\n:30\\r\\n", note: "Out-of-band metadata attached to the following reply." },
+    { type: "set", prefix: "~", wire: "~2\\r\\n+one\\r\\n+two\\r\\n", note: "Unordered aggregate of unique values." },
+    { type: "push", prefix: ">", wire: ">3\\r\\n+message\\r\\n+channel\\r\\n+payload\\r\\n", note: "Server-initiated data not necessarily tied to a request." }
+  ]
+};
+const formatWireExample = (wire: string) => wire.replace(/\\r\\n/g, "\\r\\n\n").trimEnd();
+
 const typedReplies: Record<string, { resp2: string; resp3: string }> = {
   PING: {
     resp2: "simple<PONG> | bulk<message>",
@@ -794,7 +824,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-resp-mode="resp2">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -878,6 +908,39 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         </article>
       </div>
     </section>
+
+        <section class="wire-types" aria-labelledby="wire-types-title">
+          <div class="wire-types-head">
+            <div>
+              <p class="section-kicker">wire types</p>
+              <h2 id="wire-types-title">RESP type bytes</h2>
+            </div>
+            <p>How the selected protocol represents each reply data type on the wire.</p>
+          </div>
+
+          {
+            (["resp2", "resp3"] as const).map((mode) => (
+              <div class="wire-type-panel" data-wire-type-panel={mode}>
+                <div class="wire-type-title">
+                  <span>{mode.toUpperCase()}</span>
+                  <strong>{respWireTypes[mode].length} wire forms</strong>
+                </div>
+                <div class="wire-type-grid">
+                  {respWireTypes[mode].map((item) => (
+                    <article class="wire-type-card">
+                      <header>
+                        <span class="wire-prefix">{item.prefix}</span>
+                        <h3>{item.type}</h3>
+                      </header>
+                      <code>{formatWireExample(item.wire)}</code>
+                      <p>{item.note}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ))
+          }
+        </section>
 
         <section class="tag-strip" aria-label="Concern filters">
           <details class="notation-legend">

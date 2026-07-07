@@ -300,6 +300,121 @@ h1 {
   word-break: break-word;
 }
 
+.wire-types {
+  margin: 0 0 22px;
+  border: 1px solid rgba(220, 56, 45, 0.3);
+  background: rgba(11, 5, 5, 0.8);
+}
+
+.wire-types-head {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: end;
+  border-bottom: 1px solid rgba(220, 56, 45, 0.24);
+  padding: 20px 24px;
+}
+
+.wire-types h2 {
+  margin: 6px 0 0;
+  font-size: clamp(1.35rem, 2.2vw, 1.9rem);
+  letter-spacing: 0;
+}
+
+.wire-types-head p:last-child {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.wire-type-panel {
+  padding: 18px 24px 24px;
+}
+
+.wire-type-panel[hidden],
+html[data-resp-mode="resp2"] .wire-type-panel[data-wire-type-panel="resp3"],
+html[data-resp-mode="resp3"] .wire-type-panel[data-wire-type-panel="resp2"] {
+  display: none;
+}
+
+.wire-type-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+}
+
+.wire-type-title span {
+  color: var(--acid);
+}
+
+.wire-type-title strong {
+  color: var(--text);
+}
+
+.wire-type-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wire-type-card {
+  min-width: 0;
+  border: 1px solid rgba(255, 243, 240, 0.14);
+  border-radius: 6px;
+  background: rgba(26, 12, 11, 0.54);
+  padding: 12px;
+}
+
+.wire-type-card header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.wire-prefix {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 209, 102, 0.34);
+  border-radius: 6px;
+  color: var(--amber);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-weight: 800;
+}
+
+.wire-type-card h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.wire-type-card code {
+  display: block;
+  overflow-x: auto;
+  border-left: 2px solid var(--line-hot);
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--amber);
+  padding: 8px 9px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.wire-type-card p {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.42;
+}
+
 @media (max-width: 1280px) {
   .primer {
     grid-template-columns: 220px minmax(0, 1fr);
@@ -307,6 +422,10 @@ h1 {
 
   .primer-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wire-type-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -726,6 +845,7 @@ h1 {
 @media (max-width: 980px) {
   .hero,
   .primer,
+  .wire-types-head,
   .control-deck,
   .command-grid {
     grid-template-columns: 1fr;
@@ -737,6 +857,10 @@ h1 {
 
   .primer-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wire-type-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .control-deck {
@@ -760,8 +884,14 @@ h1 {
   }
 
   .primer,
+  .wire-types-head,
+  .wire-type-panel,
   .command-card {
     padding: 16px;
+  }
+
+  .wire-type-grid {
+    grid-template-columns: 1fr;
   }
 
   .card-head,
