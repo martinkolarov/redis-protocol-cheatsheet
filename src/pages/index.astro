@@ -1,5 +1,5 @@
 ---
-import { categories, commands, tagCloud } from "../data/commands";
+import { categories, commands, concernFilters } from "../data/commands";
 import "../styles/global.css";
 
 const categoryIds = new Map(categories.map((category) => [category, category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")]));
@@ -891,7 +891,7 @@ const getErrorCases = (command: { name: string; category: string; signature: str
             </div>
           </details>
           <button class="tag active" type="button" data-tag="all">all</button>
-          {tagCloud.map((tag) => <button class="tag" type="button" data-tag={tag}>{tag}</button>)}
+          {concernFilters.map((filter) => <button class="tag" type="button" data-tag={filter.tag}>{filter.label}</button>)}
         </section>
 
         <nav class="control-deck" aria-label="Reference controls">

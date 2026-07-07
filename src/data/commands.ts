@@ -762,4 +762,15 @@ export const commands: Command[] = [
 
 export const categories = Array.from(new Set(commands.map((command) => command.category)));
 
-export const tagCloud = Array.from(new Set(commands.flatMap((command) => command.tags))).sort();
+export const concernFilters = [
+  { label: "nil / null", tag: "nil" },
+  { label: "errors", tag: "error" },
+  { label: "blocking", tag: "blocking" },
+  { label: "push", tag: "push" },
+  { label: "cursor", tag: "cursor" },
+  { label: "expiry", tag: "ttl" },
+  { label: "transactions", tag: "transaction" },
+  { label: "cluster", tag: "cluster" },
+  { label: "auth", tag: "auth" },
+  { label: "scripting", tag: "scripting" }
+];
