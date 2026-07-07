@@ -974,7 +974,6 @@ const getErrorCases = (command: { name: string; category: string; signature: str
                               <div class="inspector-tabs" role="tablist" aria-label={`${command.name} reply views`}>
                                 <button class="active" type="button" data-inspector-tab="tree">Tree</button>
                                 <button type="button" data-inspector-tab="wire">Wire</button>
-                                <button type="button" data-inspector-tab="decoded">Value</button>
                               </div>
                               <div class="inspector-toolbar">
                                 <label class="outcome-picker" data-outcome-picker>
@@ -1410,11 +1409,6 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         parseWireScenario(scenario.text).forEach((frame) => output.append(renderNestedNode(frame, { type: "frame", open: false })));
       }
 
-      function renderValueView(output, scenario) {
-        if (!scenario) return;
-        output.append(renderValueNode(scenario.value));
-      }
-
       function updateInspectorOutput(output) {
         const inspector = output.closest("[data-reply-inspector]");
         const view = output.dataset.activeView || "tree";
@@ -1429,7 +1423,6 @@ const getErrorCases = (command: { name: string; category: string; signature: str
 
         if (view === "tree") renderTreeView(output, payload.tree, active, activeValue, payload.outcomes.length > 1);
         if (view === "wire") renderWireView(inspector, output, activeWire);
-        if (view === "decoded") renderValueView(output, activeValue);
       }
 
       function updateMode(mode) {
