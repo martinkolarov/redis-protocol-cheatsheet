@@ -128,8 +128,8 @@ export const commands: Command[] = [
     category: "Generic Keys",
     signature: "EXPIRE key seconds [NX | XX | GT | LT]",
     params: ["seconds: TTL in seconds.", "NX/XX/GT/LT: optional condition."],
-    ...same("Integer 1 if timeout was set, 0 otherwise."),
-    notes: ["Missing keys return 0. Non-positive expiry deletes immediately."],
+    ...same("Integer 1 if timeout was set or key was deleted immediately; 0 if key is missing or NX/XX/GT/LT condition fails."),
+    notes: ["Missing keys return 0. Condition failures also return 0. Non-positive expiry deletes immediately and returns 1 if the key existed."],
     tags: ["keys", "ttl", "integer"]
   },
   {
@@ -137,8 +137,8 @@ export const commands: Command[] = [
     category: "Generic Keys",
     signature: "PEXPIRE key milliseconds [NX | XX | GT | LT]",
     params: ["milliseconds: TTL in ms.", "NX/XX/GT/LT: optional condition."],
-    ...same("Integer 1 if timeout was set, 0 otherwise."),
-    notes: ["Same semantics as EXPIRE but millisecond precision."],
+    ...same("Integer 1 if timeout was set or key was deleted immediately; 0 if key is missing or NX/XX/GT/LT condition fails."),
+    notes: ["Same semantics as EXPIRE but millisecond precision: missing key and condition miss both return 0."],
     tags: ["keys", "ttl", "integer"]
   },
   {
@@ -203,9 +203,9 @@ export const commands: Command[] = [
     category: "Strings",
     signature: "SET key value [NX | XX] [GET] [EX seconds | PX ms | EXAT unix | PXAT ms-unix | KEEPTTL]",
     params: ["value: binary-safe bulk string.", "NX/XX: conditional set.", "GET: return previous value.", "expiry option: optional TTL behavior."],
-    resp2: "Simple string OK, null bulk string when condition fails, or old bulk string/null with GET.",
-    resp3: "Simple string OK, null when condition fails, or old blob string/null with GET.",
-    notes: ["SET replaces older SETNX/SETEX/PSETEX patterns. GET changes the reply type."],
+    resp2: "Simple string OK; with GET, old bulk string or null bulk when previous value is missing; with NX/XX miss, null bulk and no write.",
+    resp3: "Simple string OK; with GET, old blob string or null when previous value is missing; with NX/XX miss, null and no write.",
+    notes: ["SET replaces older SETNX/SETEX/PSETEX patterns. GET changes the reply type. Null can mean either previous value missing or conditional write skipped."],
     tags: ["string", "nil", "ttl"]
   },
   {
@@ -477,9 +477,9 @@ export const commands: Command[] = [
     category: "Sorted Sets",
     signature: "ZADD key [NX | XX] [GT | LT] [CH] [INCR] score member [score member ...]",
     params: ["score member: one or more pairs.", "CH: count changed members.", "INCR: increment score of a single member."],
-    resp2: "Integer added count, or bulk string new score with INCR.",
-    resp3: "Integer added count, or double/new score value with INCR depending on server reply.",
-    notes: ["Scores parse as doubles. NaN is rejected. INCR accepts only one pair."],
+    resp2: "Integer added count, bulk string new score with INCR, or null bulk when INCR is skipped by NX/XX/GT/LT.",
+    resp3: "Integer added count, double/blob new score with INCR, or null when INCR is skipped by NX/XX/GT/LT.",
+    notes: ["Scores parse as doubles. NaN is rejected. INCR accepts only one pair. With INCR, a failed condition returns null instead of an integer count."],
     tags: ["zset", "integer", "double"]
   },
   {
@@ -545,9 +545,9 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XADD key [NOMKSTREAM] [KEEPREF | DELREF | ACKED] [MAXLEN | MINID [= | ~] threshold [LIMIT count]] id field value [field value ...]",
     params: ["id: * for server-generated ID, or explicit ms-seq ID.", "field value: one or more pairs."],
-    resp2: "Bulk string entry ID, or null bulk string if NOMKSTREAM prevents creation.",
-    resp3: "Blob string entry ID, or null if NOMKSTREAM prevents creation.",
-    notes: ["IDs must be greater than the stream top ID except special forms. Field/value arity must be even."],
+    resp2: "Bulk string entry ID, or null bulk string if NOMKSTREAM prevents creating a missing stream.",
+    resp3: "Blob string entry ID, or null if NOMKSTREAM prevents creating a missing stream.",
+    notes: ["IDs must be greater than the stream top ID except special forms. Field/value arity must be even. NOMKSTREAM turns missing-stream creation into a null reply, not an error."],
     tags: ["stream", "bulk-string", "nil"]
   },
   {
@@ -565,9 +565,9 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XREAD [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] id [id ...]",
     params: ["STREAMS: keys followed by matching last-seen IDs.", "BLOCK: optional blocking wait."],
-    resp2: "Null bulk/array on timeout; otherwise array of [bulk string stream key, array of entries], where each entry is [bulk string id, flat array of bulk-string field/value pairs].",
-    resp3: "Null _ on timeout; otherwise map of blob-string stream key => array of entries, where each entry is [blob string id, map of blob-string field => blob-string value].",
-    notes: ["Use $ to receive only future entries. BLOCK 0 waits indefinitely."],
+    resp2: "Null array when non-blocking finds no data or when BLOCK times out; otherwise array of [bulk string stream key, array of entries], where each entry is [bulk string id, flat array of bulk-string field/value pairs].",
+    resp3: "Null _ when non-blocking finds no data or when BLOCK times out; otherwise map of blob-string stream key => array of entries, where each entry is [blob string id, map of blob-string field => blob-string value].",
+    notes: ["Without BLOCK, no matching entries returns immediately as null. With BLOCK, null means the wait timed out. BLOCK 0 waits indefinitely."],
     tags: ["stream", "blocking", "array", "map", "nil"]
   },
   {
@@ -584,9 +584,9 @@ export const commands: Command[] = [
     category: "Streams",
     signature: "XREADGROUP GROUP group consumer [COUNT count] [BLOCK ms] [NOACK] STREAMS key [key ...] id [id ...]",
     params: ["group/consumer: consumer group identity.", "id: > for new messages or explicit pending IDs."],
-    resp2: "Null bulk/array on timeout; otherwise array of [bulk string stream key, array of entries], where each entry is [bulk string id, flat array of bulk-string field/value pairs].",
-    resp3: "Null _ on timeout; otherwise map of blob-string stream key => array of entries, where each entry is [blob string id, map of blob-string field => blob-string value].",
-    notes: ["Using > reads never-delivered entries. Other IDs inspect pending entries."],
+    resp2: "Null array when non-blocking finds no data or when BLOCK times out; otherwise array of [bulk string stream key, array of entries], where each entry is [bulk string id, flat array of bulk-string field/value pairs].",
+    resp3: "Null _ when non-blocking finds no data or when BLOCK times out; otherwise map of blob-string stream key => array of entries, where each entry is [blob string id, map of blob-string field => blob-string value].",
+    notes: ["Using > reads never-delivered entries. Without BLOCK, no matching entries returns immediately as null; with BLOCK, null means the wait timed out."],
     tags: ["stream", "blocking", "group", "map", "nil"]
   },
   {

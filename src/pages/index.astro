@@ -58,12 +58,12 @@ const typedReplies: Record<string, { resp2: string; resp3: string }> = {
     resp3: "simple<none|string|list|set|zset|hash|stream>"
   },
   EXPIRE: {
-    resp2: "int<0|1>",
-    resp3: "int<0|1>"
+    resp2: "int<1 set|delete-immediate, 0 missing|condition-miss>",
+    resp3: "int<1 set|delete-immediate, 0 missing|condition-miss>"
   },
   PEXPIRE: {
-    resp2: "int<0|1>",
-    resp3: "int<0|1>"
+    resp2: "int<1 set|delete-immediate, 0 missing|condition-miss>",
+    resp3: "int<1 set|delete-immediate, 0 missing|condition-miss>"
   },
   TTL: {
     resp2: "int<seconds | -1 | -2>",
@@ -90,8 +90,8 @@ const typedReplies: Record<string, { resp2: string; resp3: string }> = {
     resp3: "blob<value> | null"
   },
   SET: {
-    resp2: "simple<OK> | null-bulk | bulk<old-value>",
-    resp3: "simple<OK> | null | blob<old-value>"
+    resp2: "simple<OK> | null-bulk<condition-miss|previous-missing> | bulk<old-value>",
+    resp3: "simple<OK> | null<condition-miss|previous-missing> | blob<old-value>"
   },
   MGET: {
     resp2: "[bulk<value> | null-bulk, ...]",
@@ -206,8 +206,8 @@ const typedReplies: Record<string, { resp2: string; resp3: string }> = {
     resp3: "[blob cursor, [blob member, ...]]"
   },
   ZADD: {
-    resp2: "int<added-or-changed>\n[INCR]: bulk<new-score>",
-    resp3: "int<added-or-changed>\n[INCR]: double<new-score> | blob<new-score>"
+    resp2: "int<added-or-changed>\n[INCR]: bulk<new-score> | null-bulk<condition-miss>",
+    resp3: "int<added-or-changed>\n[INCR]: double<new-score> | blob<new-score> | null<condition-miss>"
   },
   ZRANGE: {
     resp2: "[bulk member, ...]\n[WITHSCORES]: [bulk member, bulk score, ...]",
@@ -234,24 +234,24 @@ const typedReplies: Record<string, { resp2: string; resp3: string }> = {
     resp3: "[blob cursor, [blob member, blob score, ...]]"
   },
   XADD: {
-    resp2: "bulk<entry-id> | null-bulk",
-    resp3: "blob<entry-id> | null"
+    resp2: "bulk<entry-id> | null-bulk<NOMKSTREAM>",
+    resp3: "blob<entry-id> | null<NOMKSTREAM>"
   },
   XRANGE: {
     resp2: "[[bulk id, [bulk field, bulk value, ...]], ...]",
     resp3: "[[blob id, Map<blob field, blob value>], ...]"
   },
   XREAD: {
-    resp2: "[[bulk stream, [[bulk id, [bulk field, bulk value, ...]], ...]], ...] | null-array",
-    resp3: "Map<blob stream, [[blob id, Map<blob field, blob value>], ...]> | null"
+    resp2: "[[bulk stream, [[bulk id, [bulk field, bulk value, ...]], ...]], ...] | null-array<no-data|timeout>",
+    resp3: "Map<blob stream, [[blob id, Map<blob field, blob value>], ...]> | null<no-data|timeout>"
   },
   XGROUP: {
     resp2: "simple<OK> | int<count> | error",
     resp3: "simple<OK> | int<count> | error"
   },
   XREADGROUP: {
-    resp2: "[[bulk stream, [[bulk id, [bulk field, bulk value, ...]], ...]], ...] | null-array",
-    resp3: "Map<blob stream, [[blob id, Map<blob field, blob value>], ...]> | null"
+    resp2: "[[bulk stream, [[bulk id, [bulk field, bulk value, ...]], ...]], ...] | null-array<no-data|timeout>",
+    resp3: "Map<blob stream, [[blob id, Map<blob field, blob value>], ...]> | null<no-data|timeout>"
   },
   XACK: {
     resp2: "int<acked>",
@@ -379,6 +379,42 @@ const simpleReply = (shape: string, summary: string, protocol: "RESP2" | "RESP3"
 };
 
 const replyInspectors: Record<string, ReplyInspectorSet> = {
+  EXPIRE: {
+    resp2: {
+      tree: "integer\n├─ 1: timeout set, or key deleted immediately for non-positive seconds\n├─ 0: key missing\n└─ 0: NX/XX/GT/LT condition failed",
+      wire: ":1\\r\\n\n# missing key\n:0\\r\\n\n# condition miss\n:0\\r\\n",
+      decoded: '{\n  "setOrDeleted": 1,\n  "missingKey": 0,\n  "conditionMiss": 0\n}'
+    },
+    resp3: {
+      tree: "integer\n├─ 1: timeout set, or key deleted immediately for non-positive seconds\n├─ 0: key missing\n└─ 0: NX/XX/GT/LT condition failed",
+      wire: ":1\\r\\n\n# missing key\n:0\\r\\n\n# condition miss\n:0\\r\\n",
+      decoded: '{\n  "setOrDeleted": 1,\n  "missingKey": 0,\n  "conditionMiss": 0\n}'
+    }
+  },
+  PEXPIRE: {
+    resp2: {
+      tree: "integer\n├─ 1: timeout set, or key deleted immediately for non-positive milliseconds\n├─ 0: key missing\n└─ 0: NX/XX/GT/LT condition failed",
+      wire: ":1\\r\\n\n# missing key\n:0\\r\\n\n# condition miss\n:0\\r\\n",
+      decoded: '{\n  "setOrDeleted": 1,\n  "missingKey": 0,\n  "conditionMiss": 0\n}'
+    },
+    resp3: {
+      tree: "integer\n├─ 1: timeout set, or key deleted immediately for non-positive milliseconds\n├─ 0: key missing\n└─ 0: NX/XX/GT/LT condition failed",
+      wire: ":1\\r\\n\n# missing key\n:0\\r\\n\n# condition miss\n:0\\r\\n",
+      decoded: '{\n  "setOrDeleted": 1,\n  "missingKey": 0,\n  "conditionMiss": 0\n}'
+    }
+  },
+  SET: {
+    resp2: {
+      tree: "simple string | bulk string | null bulk\n├─ success without GET: simple OK, value written\n├─ GET previous value: old value as bulk string, new value written\n├─ GET previous missing: null bulk, new value written\n└─ NX/XX condition miss: null bulk, no write",
+      wire: "+OK\\r\\n\n# GET previous value\n$3\\r\\nold\\r\\n\n# GET previous missing\n$-1\\r\\n\n# condition miss\n$-1\\r\\n",
+      decoded: '{\n  "success": "OK",\n  "previousValue": "old",\n  "previousMissing": null,\n  "conditionMiss": null\n}'
+    },
+    resp3: {
+      tree: "simple string | blob string | null\n├─ success without GET: simple OK, value written\n├─ GET previous value: old value as blob string, new value written\n├─ GET previous missing: null, new value written\n└─ NX/XX condition miss: null, no write",
+      wire: "+OK\\r\\n\n# GET previous value\n$3\\r\\nold\\r\\n\n# GET previous missing\n_\\r\\n\n# condition miss\n_\\r\\n",
+      decoded: '{\n  "success": "OK",\n  "previousValue": "old",\n  "previousMissing": null,\n  "conditionMiss": null\n}'
+    }
+  },
   SCAN: {
     resp2: {
       tree: "array\n├─ cursor: bulk string\n└─ keys: array\n   └─ key*: bulk string",
@@ -439,6 +475,18 @@ const replyInspectors: Record<string, ReplyInspectorSet> = {
       decoded: '{\n  "success": ["queue", "job"],\n  "timeout": null\n}'
     }
   },
+  ZADD: {
+    resp2: {
+      tree: "integer | bulk string | null bulk\n├─ normal add/update: integer count\n├─ INCR success: new score as bulk string\n└─ INCR with failed NX/XX/GT/LT condition: null bulk, score unchanged",
+      wire: ":1\\r\\n\n# INCR success\n$4\\r\\n10.5\\r\\n\n# INCR condition miss\n$-1\\r\\n",
+      decoded: '{\n  "changed": 1,\n  "incrementedScore": "10.5",\n  "conditionMiss": null\n}'
+    },
+    resp3: {
+      tree: "integer | double/blob string | null\n├─ normal add/update: integer count\n├─ INCR success: new score as double or blob string\n└─ INCR with failed NX/XX/GT/LT condition: null, score unchanged",
+      wire: ":1\\r\\n\n# INCR success\n,10.5\\r\\n\n# INCR condition miss\n_\\r\\n",
+      decoded: '{\n  "changed": 1,\n  "incrementedScore": 10.5,\n  "conditionMiss": null\n}'
+    }
+  },
   ZRANGE: {
     resp2: {
       tree: "array\n├─ member*: bulk string\n└─ WITHSCORES: alternating member bulk string, score bulk string",
@@ -475,28 +523,40 @@ const replyInspectors: Record<string, ReplyInspectorSet> = {
       decoded: '[["1700000000000-0", { "name": "alice", "age": "42" }]]'
     }
   },
-  XREAD: {
+  XADD: {
     resp2: {
-      tree: "array | null array\n└─ stream result*\n   ├─ stream: bulk string\n   └─ entries: array\n      └─ entry*\n         ├─ id: bulk string\n         └─ fields: array\n            ├─ field: bulk string\n            └─ value: bulk string",
-      wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
-      decoded: '{\n  "success": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]]\n  ],\n  "timeout": null\n}'
+      tree: "bulk string | null bulk\n├─ success: entry ID as bulk string\n└─ NOMKSTREAM with missing stream: null bulk, no stream created",
+      wire: "$15\\r\\n1700000000000-0\\r\\n\n# NOMKSTREAM missing stream\n$-1\\r\\n",
+      decoded: '{\n  "success": "1700000000000-0",\n  "nomkstreamMissingStream": null\n}'
     },
     resp3: {
-      tree: "map | null\n└─ stream name: blob string\n   └─ entries: array\n      └─ entry*\n         ├─ id: blob string\n         └─ fields: map\n            └─ field blob string => value blob string",
-      wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n_\\r\\n",
-      decoded: '{\n  "success": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]]\n  },\n  "timeout": null\n}'
+      tree: "blob string | null\n├─ success: entry ID as blob string\n└─ NOMKSTREAM with missing stream: null, no stream created",
+      wire: "$15\\r\\n1700000000000-0\\r\\n\n# NOMKSTREAM missing stream\n_\\r\\n",
+      decoded: '{\n  "success": "1700000000000-0",\n  "nomkstreamMissingStream": null\n}'
+    }
+  },
+  XREAD: {
+    resp2: {
+      tree: "array | null array\n├─ success: stream result array\n│  └─ stream result*\n│     ├─ stream: bulk string\n│     └─ entries: array\n│        └─ entry*\n│           ├─ id: bulk string\n│           └─ fields: array\n│              ├─ field: bulk string\n│              └─ value: bulk string\n├─ no data without BLOCK: null array returned immediately\n└─ BLOCK timeout: null array after wait expires",
+      wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# no data without BLOCK\n*-1\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
+      decoded: '{\n  "success": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]]\n  ],\n  "noData": null,\n  "timeout": null\n}'
+    },
+    resp3: {
+      tree: "map | null\n├─ success: stream result map\n│  └─ stream name: blob string\n│     └─ entries: array\n│        └─ entry*\n│           ├─ id: blob string\n│           └─ fields: map\n│              └─ field blob string => value blob string\n├─ no data without BLOCK: null returned immediately\n└─ BLOCK timeout: null after wait expires",
+      wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# no data without BLOCK\n_\\r\\n\n# BLOCK timeout\n_\\r\\n",
+      decoded: '{\n  "success": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]]\n  },\n  "noData": null,\n  "timeout": null\n}'
     }
   },
   XREADGROUP: {
     resp2: {
-      tree: "array | null array\n└─ stream result*\n   ├─ stream: bulk string\n   └─ entries: array\n      └─ entry*\n         ├─ id: bulk string\n         └─ fields: array\n            ├─ field: bulk string\n            └─ value: bulk string",
-      wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
-      decoded: '{\n  "success": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]]\n  ],\n  "timeout": null\n}'
+      tree: "array | null array\n├─ success: stream result array\n│  └─ stream result*\n│     ├─ stream: bulk string\n│     └─ entries: array\n│        └─ entry*\n│           ├─ id: bulk string\n│           └─ fields: array\n│              ├─ field: bulk string\n│              └─ value: bulk string\n├─ no data without BLOCK: null array returned immediately\n└─ BLOCK timeout: null array after wait expires",
+      wire: "*1\\r\\n*2\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n*2\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# no data without BLOCK\n*-1\\r\\n\n# BLOCK timeout\n*-1\\r\\n",
+      decoded: '{\n  "success": [\n    ["mystream", [["1700000000000-0", ["name", "alice"]]]]\n  ],\n  "noData": null,\n  "timeout": null\n}'
     },
     resp3: {
-      tree: "map | null\n└─ stream name: blob string\n   └─ entries: array\n      └─ entry*\n         ├─ id: blob string\n         └─ fields: map\n            └─ field blob string => value blob string",
-      wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# BLOCK timeout\n_\\r\\n",
-      decoded: '{\n  "success": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]]\n  },\n  "timeout": null\n}'
+      tree: "map | null\n├─ success: stream result map\n│  └─ stream name: blob string\n│     └─ entries: array\n│        └─ entry*\n│           ├─ id: blob string\n│           └─ fields: map\n│              └─ field blob string => value blob string\n├─ no data without BLOCK: null returned immediately\n└─ BLOCK timeout: null after wait expires",
+      wire: "%1\\r\\n$8\\r\\nmystream\\r\\n*1\\r\\n*2\\r\\n$15\\r\\n1700000000000-0\\r\\n%1\\r\\n$4\\r\\nname\\r\\n$5\\r\\nalice\\r\\n\n# no data without BLOCK\n_\\r\\n\n# BLOCK timeout\n_\\r\\n",
+      decoded: '{\n  "success": {\n    "mystream": [["1700000000000-0", { "name": "alice" }]]\n  },\n  "noData": null,\n  "timeout": null\n}'
     }
   },
   SUBSCRIBE: {
@@ -653,19 +713,21 @@ const commandErrorCases: Record<string, string[]> = {
   AUTH: ["Bad credentials -> -WRONGPASS invalid username-password pair or user disabled.", "AUTH when no password is configured -> -ERR AUTH <password> called without any password configured."],
   SELECT: ["Invalid DB index -> -ERR invalid DB index.", "Cluster mode DB other than 0 -> -ERR SELECT is not allowed in cluster mode."],
   CLIENT: ["Unknown subcommand or blocked operation -> -ERR with subcommand-specific text.", "CLIENT REPLY OFF/SKIP changes whether later errors are delivered to the client."],
+  EXPIRE: ["Missing key and NX/XX/GT/LT condition miss are not errors; both return integer 0."],
+  PEXPIRE: ["Missing key and NX/XX/GT/LT condition miss are not errors; both return integer 0."],
   RENAME: ["Missing source key -> -ERR no such key."],
-  SET: ["NX/XX condition miss is not an error; return null instead.", "Conflicting expiry or condition options -> -ERR syntax error.", "With GET, an existing non-string value -> -WRONGTYPE."],
+  SET: ["NX/XX condition miss is not an error; return null and do not write.", "With GET, previous missing value returns null but the write still succeeds.", "Conflicting expiry or condition options -> -ERR syntax error.", "With GET, an existing non-string value -> -WRONGTYPE."],
   INCR: ["Value is not a base-10 signed 64-bit integer -> -ERR value is not an integer or out of range.", "Overflow -> -ERR increment or decrement would overflow."],
   DECR: ["Value is not a base-10 signed 64-bit integer -> -ERR value is not an integer or out of range.", "Overflow -> -ERR increment or decrement would overflow."],
   GETRANGE: ["Invalid range indexes -> -ERR value is not an integer or out of range."],
   BLPOP: ["Timeout is not an error; return null array/null when no element becomes available.", "Negative timeout -> -ERR timeout is negative."],
   BRPOP: ["Timeout is not an error; return null array/null when no element becomes available.", "Negative timeout -> -ERR timeout is negative."],
-  ZADD: ["Invalid score -> -ERR value is not a valid float.", "Conflicting NX/XX/GT/LT options -> -ERR syntax error."],
+  ZADD: ["Invalid score -> -ERR value is not a valid float.", "With INCR, a failed NX/XX/GT/LT condition is not an error; return null and leave score unchanged.", "Conflicting NX/XX/GT/LT options -> -ERR syntax error."],
   ZSCORE: ["Missing member/key is not an error; return null."],
-  XADD: ["ID not greater than stream top item -> -ERR The ID specified in XADD is equal or smaller than the target stream top item.", "MAXLEN/MINID syntax or bad ID -> -ERR with stream-specific text."],
-  XREAD: ["Timeout is not an error; return null array/null when BLOCK expires.", "Malformed stream ID or COUNT/BLOCK value -> -ERR with stream-specific text."],
+  XADD: ["NOMKSTREAM with a missing stream is not an error; return null and create nothing.", "ID not greater than stream top item -> -ERR The ID specified in XADD is equal or smaller than the target stream top item.", "MAXLEN/MINID syntax or bad ID -> -ERR with stream-specific text."],
+  XREAD: ["No data without BLOCK and timeout with BLOCK are not errors; both return null array/null.", "Malformed stream ID or COUNT/BLOCK value -> -ERR with stream-specific text."],
   XGROUP: ["Missing stream/group/consumer state can produce -NOGROUP or -BUSYGROUP depending on subcommand.", "Bad stream ID -> -ERR with stream-specific text."],
-  XREADGROUP: ["Unknown group or missing key group state -> -NOGROUP.", "Timeout is not an error; return null array/null when BLOCK expires."],
+  XREADGROUP: ["Unknown group or missing key group state -> -NOGROUP.", "No data without BLOCK and timeout with BLOCK are not errors; both return null array/null."],
   XACK: ["Unknown group or missing key group state -> -NOGROUP."],
   SUBSCRIBE: ["In RESP2 subscribed mode, only a limited command set is accepted; other commands return -ERR.", "Malformed channel arguments -> -ERR wrong number of arguments."],
   PSUBSCRIBE: ["In RESP2 subscribed mode, only a limited command set is accepted; other commands return -ERR.", "Malformed pattern arguments -> -ERR wrong number of arguments."],
@@ -1095,6 +1157,12 @@ const getErrorCases = (command: { name: string; category: string; signature: str
         const normalizeScenarioName = (name) => {
           const lower = name.trim().toLowerCase();
           if (lower.includes("timeout")) return "timeout";
+          if (lower.includes("no data")) return "no data";
+          if (lower.includes("missing key")) return "missing key";
+          if (lower.includes("condition")) return "condition miss";
+          if (lower.includes("previous missing")) return "previous missing";
+          if (lower.includes("previous value")) return "previous value";
+          if (lower.includes("nomkstream")) return "NOMKSTREAM";
           if (lower.includes("watch")) return "watch abort";
           if (lower.includes("null")) return "null";
           return lower.replace(/\s+/g, "-");
@@ -1119,7 +1187,9 @@ const getErrorCases = (command: { name: string; category: string; signature: str
           const parsed = JSON.parse(text);
           if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
             const keys = Object.keys(parsed);
-            const scenarioKeys = keys.filter((key) => ["success", "timeout", "watchAbort", "empty", "nil", "null"].includes(key));
+            const scenarioKeys = keys.filter((key) =>
+              ["success", "setOrDeleted", "missingKey", "previousValue", "previousMissing", "conditionMiss", "changed", "incrementedScore", "nomkstreamMissingStream", "noData", "timeout", "watchAbort", "empty", "nil", "null"].includes(key)
+            );
             if (scenarioKeys.length > 1) {
               return scenarioKeys.map((key) => ({ name: key.replace(/([A-Z])/g, " $1").toLowerCase(), value: parsed[key] }));
             }
