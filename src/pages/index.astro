@@ -1,0 +1,239 @@
+---
+import { categories, commands, tagCloud } from "../data/commands";
+import "../styles/global.css";
+
+const categoryIds = new Map(categories.map((category) => [category, category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")]));
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A hacker-readable Redis protocol cheat sheet focused on command signatures, RESP2/RESP3 replies, and implementation edge cases."
+    />
+    <title>Redis Protocol Cheat Sheet</title>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">redis://wire-reference</p>
+          <h1>Redis Protocol Cheat Sheet</h1>
+          <p class="dek">
+            Command shapes, RESP replies, and edge conditions for developers building clients, proxies,
+            protocol test suites or Redis-compatible servers.
+          </p>
+        </div>
+        <aside class="status-panel" aria-label="Protocol status">
+          <div class="status-row">
+            <span>transport</span>
+            <strong>TCP / RESP</strong>
+          </div>
+          <div class="status-row">
+            <span>coverage</span>
+            <strong>{commands.length} core commands</strong>
+          </div>
+          <div class="status-row">
+            <span>mode</span>
+            <strong data-mode-label>RESP2</strong>
+          </div>
+        </aside>
+      </header>
+
+      <nav class="control-deck" aria-label="Reference controls">
+        <div class="search-wrap">
+          <label for="command-search">Search</label>
+          <input id="command-search" type="search" placeholder="GET, stream, nil, blocking..." autocomplete="off" />
+        </div>
+
+        <fieldset class="toggle-wrap" aria-label="RESP version">
+          <legend>Protocol</legend>
+          <label class="segmented">
+            <input type="radio" name="resp-mode" value="resp2" checked />
+            <span>RESP2</span>
+          </label>
+          <label class="segmented">
+            <input type="radio" name="resp-mode" value="resp3" />
+            <span>RESP3</span>
+          </label>
+        </fieldset>
+
+        <div class="select-wrap">
+          <label for="category-filter">Category</label>
+          <select id="category-filter">
+            <option value="all">All categories</option>
+            {categories.map((category) => <option value={category}>{category}</option>)}
+          </select>
+        </div>
+      </nav>
+
+      <main>
+        <section class="primer" aria-labelledby="primer-title">
+          <div>
+            <p class="section-kicker">RESP primer</p>
+            <h2 id="primer-title">The minimum parser surface</h2>
+          </div>
+          <div class="primer-grid">
+            <article>
+              <h3>Requests</h3>
+              <p>Clients send commands as arrays of bulk strings. The first element is the command name.</p>
+              <code>*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n</code>
+            </article>
+            <article>
+              <h3>RESP2 replies</h3>
+              <p><code>+</code> simple string, <code>-</code> error, <code>:</code> integer, <code>$</code> bulk string, <code>*</code> array.</p>
+              <p>Null is encoded as <code>$-1\r\n</code> or <code>*-1\r\n</code>, depending on context.</p>
+            </article>
+            <article>
+              <h3>RESP3 replies</h3>
+              <p>Adds native <code>_</code> null, <code>#</code> boolean, <code>,</code> double, <code>%</code> map, <code>~</code> set, and <code>&gt;</code> push.</p>
+              <p>Use <code>HELLO 3</code> to switch a connection from RESP2 to RESP3.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="tag-strip" aria-label="Concern filters">
+          <button class="tag active" type="button" data-tag="all">all</button>
+          {tagCloud.map((tag) => <button class="tag" type="button" data-tag={tag}>{tag}</button>)}
+        </section>
+
+        <div class="results-line" aria-live="polite">
+          <span id="result-count">{commands.length}</span> commands visible
+        </div>
+
+        {
+          categories.map((category) => (
+            <section class="command-section" id={categoryIds.get(category)} data-section={category}>
+              <div class="section-heading">
+                <p class="section-kicker">category</p>
+                <h2>{category}</h2>
+                <a href={`#${categoryIds.get(category)}`}>#</a>
+              </div>
+              <div class="command-grid">
+                {commands
+                  .filter((command) => command.category === category)
+                  .map((command) => (
+                    <article
+                      class="command-card"
+                      data-command-card
+                      data-name={command.name.toLowerCase()}
+                      data-category={command.category}
+                      data-tags={command.tags.join(" ")}
+                      data-search={`${command.name} ${command.category} ${command.signature} ${command.params.join(" ")} ${command.notes.join(" ")} ${command.tags.join(" ")}`.toLowerCase()}
+                    >
+                      <header class="card-head">
+                        <div>
+                          <p class="command-category">{command.category}</p>
+                          <h3>{command.name}</h3>
+                        </div>
+                        <div class="tag-bits">
+                          {command.tags.slice(0, 3).map((tag) => (
+                            <span>{tag}</span>
+                          ))}
+                        </div>
+                      </header>
+
+                      <div class="signature">
+                        <span>$</span>
+                        <code>{command.signature}</code>
+                      </div>
+
+                      <div class="card-columns">
+                        <div>
+                          <h4>Params</h4>
+                          <ul>
+                            {command.params.map((param) => (
+                              <li>{param}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <h4>Reply</h4>
+                          <p class="reply" data-resp2={command.resp2} data-resp3={command.resp3}>{command.resp2}</p>
+                        </div>
+                      </div>
+
+                      <div class="notes">
+                        <h4>Implementation notes</h4>
+                        <ul>
+                          {command.notes.map((note) => (
+                            <li>{note}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </article>
+                  ))}
+              </div>
+            </section>
+          ))
+        }
+      </main>
+    </div>
+
+    <script>
+      const searchInput = document.querySelector("#command-search");
+      const categoryFilter = document.querySelector("#category-filter");
+      const resultCount = document.querySelector("#result-count");
+      const modeLabels = document.querySelectorAll("[data-mode-label]");
+      const modeInputs = document.querySelectorAll("input[name='resp-mode']");
+      const tagButtons = document.querySelectorAll("[data-tag]");
+      const cards = Array.from(document.querySelectorAll("[data-command-card]"));
+      const sections = Array.from(document.querySelectorAll("[data-section]"));
+      let selectedTag = "all";
+
+      function updateMode(mode) {
+        const label = mode.toUpperCase();
+        modeLabels.forEach((node) => {
+          node.textContent = label;
+        });
+        document.querySelectorAll("[data-resp2]").forEach((node) => {
+          node.textContent = node.dataset[mode] || "";
+        });
+        document.documentElement.dataset.respMode = mode;
+      }
+
+      function applyFilters() {
+        const query = searchInput.value.trim().toLowerCase();
+        const category = categoryFilter.value;
+        let visible = 0;
+
+        cards.forEach((card) => {
+          const matchesQuery = !query || card.dataset.search.includes(query);
+          const matchesCategory = category === "all" || card.dataset.category === category;
+          const tags = card.dataset.tags.split(" ");
+          const matchesTag = selectedTag === "all" || tags.includes(selectedTag);
+          const show = matchesQuery && matchesCategory && matchesTag;
+          card.hidden = !show;
+          if (show) visible += 1;
+        });
+
+        sections.forEach((section) => {
+          const visibleCards = section.querySelectorAll("[data-command-card]:not([hidden])").length;
+          section.hidden = visibleCards === 0;
+        });
+
+        resultCount.textContent = String(visible);
+      }
+
+      modeInputs.forEach((input) => {
+        input.addEventListener("change", () => updateMode(input.value));
+      });
+
+      tagButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          selectedTag = button.dataset.tag;
+          tagButtons.forEach((tag) => tag.classList.toggle("active", tag === button));
+          applyFilters();
+        });
+      });
+
+      searchInput.addEventListener("input", applyFilters);
+      categoryFilter.addEventListener("change", applyFilters);
+      updateMode("resp2");
+      applyFilters();
+    </script>
+  </body>
+</html>
